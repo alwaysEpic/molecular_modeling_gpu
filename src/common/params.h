@@ -55,7 +55,7 @@ static inline SimParams defaultParams() {
 
   // Simulation
   p.iter = 1000;
-  p.blockSize = 128;
+  p.blockSize = 256;
   p.limit = 0.0f;
   p.seed = 0;
   p.start_x = 0.0f;

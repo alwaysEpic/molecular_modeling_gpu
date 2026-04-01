@@ -29,6 +29,11 @@ if(CMAKE_CUDA_COMPILER)
         src/timing.c
     )
     target_include_directories(mc_sim PRIVATE src)
+
+    # Fast math: uses hardware intrinsics for sqrt, sin, cos, etc.
+    # ~2-7x faster for math-heavy kernels with no qualitative impact
+    # on Brownian motion statistics (Januszewski & Kostur 2009, Section 6)
+    target_compile_options(mc_sim PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>)
 else()
     message(STATUS "CUDA not found -- only building mc_sim_cpu")
 endif()

@@ -10,52 +10,57 @@
 #include "common/params.h"
 #include "simulation_gpu.h"
 
-__device__ void d_reflection(float x1, float y1, float x0, float y0, double* x_new, double* y_new, float radius) {
-  double x_diff = (x1 - x0);
-  double y_diff = (y1 - y0);
+__device__ void d_reflection(float x1, float y1, float x0, float y0, float* x_new, float* y_new, float radius) {
+  float x_diff = x1 - x0;
+  float y_diff = y1 - y0;
 
-  double a = x_diff * x_diff + y_diff * y_diff;
-  double b = 2 * ((x_diff)*x0 + (y_diff)*y0);
-  double c = x0 * x0 + y0 * y0 - (double)radius * radius;
-  double t_Param = (-b + sqrt(b * b - 4 * a * c)) / (2 * a);
+  float a = x_diff * x_diff + y_diff * y_diff;
+  float b = 2.0f * (x_diff * x0 + y_diff * y0);
+  float c = x0 * x0 + y0 * y0 - radius * radius;
+  float disc = b * b - 4.0f * a * c;
+  float t_Param = (-b + sqrtf(disc)) / (2.0f * a);
 
-  double x_t = (x_diff)*t_Param + x0;
-  double y_t = (y_diff)*t_Param + y0;
-  double phiAngle = atan2(y_t, x_t);
+  float x_t = x_diff * t_Param + x0;
+  float y_t = y_diff * t_Param + y0;
+  float phi = atan2f(y_t, x_t);
+  float cos_phi = cosf(phi);
+  float sin_phi = sinf(phi);
 
-  double A_rho = cos(phiAngle) * (x1 - x_t) + sin(phiAngle) * (y1 - y_t);
-  double A_phi = -sin(phiAngle) * (x1 - x_t) + cos(phiAngle) * (y1 - y_t);
-  *x_new = x_t + (cos(phiAngle) * (-A_rho) - sin(phiAngle) * A_phi);
-  *y_new = y_t + (sin(phiAngle) * (-A_rho) + cos(phiAngle) * A_phi);
+  float overshoot_x = x1 - x_t;
+  float overshoot_y = y1 - y_t;
+  float A_rho = cos_phi * overshoot_x + sin_phi * overshoot_y;
+  float A_phi = -sin_phi * overshoot_x + cos_phi * overshoot_y;
+
+  // Reflect: negate radial component, keep tangential
+  *x_new = x_t + cos_phi * (-A_rho) - sin_phi * A_phi;
+  *y_new = y_t + sin_phi * (-A_rho) + cos_phi * A_phi;
 }
 
-__global__ void d_update(long long rng_seed, float Db, float deltaT, int iter, float* d_x, float* d_y, float* d_z,
-                         float velocity, int walls, float radius, int start_flag, int t_step, int* d_hit_flag,
+__global__ void d_update(long long rng_seed, float diffStep, float driftStep, int iter, float* d_x, float* d_y,
+                         float* d_z, int walls, float radius, int start_flag, int t_step, int* d_hit_flag,
                          int* d_hit_step, float* d_hit_x, float* d_hit_y, float* d_hit_z, float limit, float rec_rad,
-                         float locx, float locy, float locz, int firsthit,
-                         float start_x, float start_y, float start_z) {
+                         float locx, float locy, float locz, int firsthit, float start_x, float start_y,
+                         float start_z) {
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= iter) return;
 
   // Skip particles that already recorded a first-hit
   if (firsthit && d_hit_flag[idx]) return;
 
-  float x_next, y_next, z_next;
-  float x_last, y_last;
-
   // Per-call RNG: Philox on stack (registers), seeded by clock64() or fixed seed
   // This is 4-5x faster than persistent global memory state — see LEARNINGS.md
   curandStatePhilox4_32_10_t state;
   curand_init(rng_seed, idx, 0, &state);
 
-  float r_x = curand_normal(&state);
-  float r_y = curand_normal(&state);
-  float r_z = curand_normal(&state);
+  // Generate 4 normals at once (Philox natively produces 4x32-bit values,
+  // curand_normal4 exploits this — ~30% faster than 3 separate calls)
+  float4 rn = curand_normal4(&state);
 
-  x_next = sqrt(2 * Db * deltaT) * r_x;
-  y_next = sqrt(2 * Db * deltaT) * r_y;
-  z_next = (sqrt(2 * Db * deltaT) * r_z) + velocity * deltaT;
+  float x_next = diffStep * rn.x;
+  float y_next = diffStep * rn.y;
+  float z_next = diffStep * rn.z + driftStep;
 
+  float x_last, y_last;
   if (walls == 1) {
     if (start_flag == 0) {
       x_last = start_x;
@@ -78,7 +83,7 @@ __global__ void d_update(long long rng_seed, float Db, float deltaT, int iter, f
 
   if (walls == 1) {
     if (sqrtf(d_x[idx] * d_x[idx] + d_y[idx] * d_y[idx]) > radius) {
-      double refl_x, refl_y;
+      float refl_x, refl_y;
       d_reflection(x_last + x_next, y_last + y_next, x_last, y_last, &refl_x, &refl_y, radius);
 
       // refl_x/y are absolute world-space positions (built from wall intersection
@@ -119,6 +124,10 @@ __global__ void d_update(long long rng_seed, float Db, float deltaT, int iter, f
 float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   int numSteps = lround(p.time_in / p.deltaT);
   int gridSize = (p.iter + p.blockSize - 1) / p.blockSize;
+
+  // Precompute constants (same for every thread every timestep)
+  float diffStep = sqrtf(2.0f * p.Db * p.deltaT);
+  float driftStep = p.velocity * p.deltaT;
 
   // Device position arrays
   float *d_x, *d_y, *d_z;
@@ -163,10 +172,10 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
     // RNG seed: fixed seed or clock64() for each kernel call
     long long rng_seed = (p.seed != 0) ? p.seed + t_count : clock();
 
-    d_update<<<gridSize, p.blockSize>>>(rng_seed, p.Db, p.deltaT, p.iter, d_x, d_y, d_z, p.velocity, p.walls,
-                                        p.radius, start_flag, t_count, d_hit_flag, d_hit_step, d_hit_x, d_hit_y,
-                                        d_hit_z, p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit,
-                                        p.start_x, p.start_y, p.start_z);
+    d_update<<<gridSize, p.blockSize>>>(rng_seed, diffStep, driftStep, p.iter, d_x, d_y, d_z, p.walls, p.radius,
+                                        start_flag, t_count, d_hit_flag, d_hit_step, d_hit_x, d_hit_y, d_hit_z,
+                                        p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit, p.start_x,
+                                        p.start_y, p.start_z);
 
     cudaError_t code = cudaGetLastError();
     if (code != cudaSuccess && p.verbose == 1)
@@ -188,8 +197,9 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
             fprintf(fp_out, "%0.15f, %0.15f, %0.15f, %d, \n", x[i_count], y[i_count], z[i_count], t_count);
             last_GPU[i_count] = 1;
           }
-          if ((p.limit == 0) && p.rec_rad > sqrt(pow(x[i_count] - p.locx, 2) + pow(y[i_count] - p.locy, 2) +
-                                                  pow(z[i_count] - p.locz, 2))) {
+          if ((p.limit == 0) && p.rec_rad > sqrtf((x[i_count] - p.locx) * (x[i_count] - p.locx) +
+                                                   (y[i_count] - p.locy) * (y[i_count] - p.locy) +
+                                                   (z[i_count] - p.locz) * (z[i_count] - p.locz))) {
             fprintf(fp_out, "%0.15f, %0.15f, %0.15f, %d, \n", x[i_count], y[i_count], z[i_count], t_count);
             last_GPU[i_count] = 1;
           }

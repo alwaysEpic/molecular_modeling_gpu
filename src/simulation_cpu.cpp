@@ -36,12 +36,11 @@ static float randn_h(float mu, float sigma) {
 }
 
 // Update function for CPU
-static void h_update(float Db, float deltaT, float velocity, float* h_x, float* h_y, float* h_z, float rand_x,
-                     float rand_y, float rand_z) {
-  float diffStep = sqrt(2 * Db * deltaT);
+static void h_update(float diffStep, float driftStep, float* h_x, float* h_y, float* h_z, float rand_x, float rand_y,
+                     float rand_z) {
   *h_x += diffStep * rand_x;
   *h_y += diffStep * rand_y;
-  *h_z += diffStep * rand_z + velocity * deltaT;
+  *h_z += diffStep * rand_z + driftStep;
 }
 
 double run_cpu_simulation(const SimParams& p, FILE* fp_out) {
@@ -53,6 +52,10 @@ double run_cpu_simulation(const SimParams& p, FILE* fp_out) {
   } else {
     srand((unsigned)time(nullptr));
   }
+
+  // Precompute constants (same for every particle every timestep)
+  float diffStep = sqrtf(2.0f * p.Db * p.deltaT);
+  float driftStep = p.velocity * p.deltaT;
 
   float h_x, h_y, h_z;
   float rand_x = 0, rand_y = 0, rand_z = 0;
@@ -71,7 +74,7 @@ double run_cpu_simulation(const SimParams& p, FILE* fp_out) {
       rand_y = randn_h(0, 1);
       rand_z = randn_h(0, 1);
 
-      h_update(p.Db, p.deltaT, p.velocity, &h_x, &h_y, &h_z, rand_x, rand_y, rand_z);
+      h_update(diffStep, driftStep, &h_x, &h_y, &h_z, rand_x, rand_y, rand_z);
       if ((p.firsthit == 1 && last_CPU == 0) || p.allhit == 1) {
         // Receiver test
         if ((p.limit == 0) && p.rec_rad > sqrt((h_x - p.locx) * (h_x - p.locx) + (h_y - p.locy) * (h_y - p.locy) +
