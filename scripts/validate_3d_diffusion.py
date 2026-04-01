@@ -24,17 +24,29 @@ import numpy as np
 
 
 def load_hit_times(filename, time_step=1E-7):
-    """Load CSV and extract hit times from the timestep column."""
+    """Load CSV and extract hit times from the timestep column.
+
+    Handles both output formats:
+      CPU: x, y, z, iteration, timestep   (timestep is last real column)
+      GPU: x, y, z, timestep              (timestep is last real column)
+    Trailing commas in CSV produce NaN columns — we find the last
+    non-NaN column per row as the timestep.
+    """
     data = np.genfromtxt(filename, delimiter=',', skip_header=0)
+    if data.size == 0:
+        return np.array([])
     if data.ndim == 1:
         data = data.reshape(1, -1)
-    # Filter out any NaN rows
     data = data[~np.isnan(data).all(axis=1)]
-    valid_cols = np.sum(~np.isnan(data[0, :]))
-    if valid_cols >= 5:
-        timesteps = data[:, 4]  # CPU output
-    else:
-        timesteps = data[:, 3]  # GPU output
+    if data.size == 0:
+        return np.array([])
+    n_rows = data.shape[0]
+    timesteps = np.full(n_rows, np.nan)
+    for i in range(n_rows):
+        row = data[i, :]
+        valid = row[~np.isnan(row)]
+        if len(valid) > 0:
+            timesteps[i] = valid[-1]
     hit_times = timesteps[~np.isnan(timesteps)] * time_step
     hit_times = hit_times[hit_times > 0]
     return hit_times

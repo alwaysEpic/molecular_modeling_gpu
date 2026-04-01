@@ -16,16 +16,24 @@ import numpy as np
 
 
 def load_hit_times(filename, time_step=1E-7):
-    """Load CSV and extract hit times."""
+    """Load CSV and extract hit times (last non-NaN column per row)."""
     data = np.genfromtxt(filename, delimiter=',', skip_header=0)
+    if data.size == 0:
+        return np.array([])
     if data.ndim == 1:
         data = data.reshape(1, -1)
-    valid_cols = np.sum(~np.isnan(data[0, :]))
-    if valid_cols >= 5:
-        timesteps = data[:, 4]  # CPU output
-    else:
-        timesteps = data[:, 3]  # GPU output
-    return timesteps * time_step
+    data = data[~np.isnan(data).all(axis=1)]
+    if data.size == 0:
+        return np.array([])
+    n_rows = data.shape[0]
+    timesteps = np.full(n_rows, np.nan)
+    for i in range(n_rows):
+        row = data[i, :]
+        valid = row[~np.isnan(row)]
+        if len(valid) > 0:
+            timesteps[i] = valid[-1]
+    hit_times = timesteps[~np.isnan(timesteps)] * time_step
+    return hit_times[hit_times > 0]
 
 
 def main():
