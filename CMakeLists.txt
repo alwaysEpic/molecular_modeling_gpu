@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(mc_sim LANGUAGES CXX)
+project(mc_sim LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 

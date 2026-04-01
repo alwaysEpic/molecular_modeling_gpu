@@ -10,6 +10,9 @@
 
 #include <sys/time.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Subtract the `struct timeval' value 'then' from 'now',
    returning the difference as a float representing seconds
@@ -18,6 +21,10 @@
 float elapsedTime(struct timeval now, struct timeval then);
 
 double currentTime();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

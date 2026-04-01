@@ -21,9 +21,14 @@ def load_hit_times(filename, time_step=1E-7):
     data = np.genfromtxt(filename, delimiter=',', skip_header=0)
     if data.ndim == 1:
         data = data.reshape(1, -1)
-    # Last non-NaN column contains the timestep index
-    # CSV format: x, y, z, timestep,
-    timesteps = data[:, 3]
+    # CPU format: x, y, z, iteration, timestep,  (timestep in column 4)
+    # GPU format: x, y, z, timestep,             (timestep in column 3)
+    # Detect by column count (ignoring trailing NaN from trailing comma)
+    valid_cols = np.sum(~np.isnan(data[0, :]))
+    if valid_cols >= 5:
+        timesteps = data[:, 4]  # CPU output
+    else:
+        timesteps = data[:, 3]  # GPU output
     hit_times = timesteps * time_step
     return hit_times
 
