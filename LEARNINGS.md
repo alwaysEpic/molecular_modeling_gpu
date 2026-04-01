@@ -63,8 +63,8 @@ See detailed entry under Bugs Found.
 Items identified during deep review, to be addressed:
 1. ~~KS test as formal pass/fail~~ (done — 1D uses scipy.stats.invgauss, 3D uses numerical CDF + binomial hit rate test)
 2. CSV NaN filtering — scripts don't skip headers, MATLAB skips 2 rows
-3. np.trapezoid compatibility — crashes on NumPy < 2.0
-4. Dead QQ plot code in validate_rng.py
+3. ~~np.trapezoid compatibility~~ (done — pinned numpy>=2.0, scipy>=1.11 in requirements.txt)
+4. ~~Dead QQ plot code in validate_rng.py~~ (done — removed dead code, dropped try/except for scipy since it's pinned)
 5. 3D test at 1k paths — only ~200 hits across 120 bins is meaningless
 6. Wall reflection validation — TobyThesisTest_walls.m not ported
 7. Multi-parameter 1D test — TobyThesisTest_dist.m uses different params

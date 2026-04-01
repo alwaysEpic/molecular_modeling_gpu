@@ -82,18 +82,14 @@ def test_autocorrelation(samples, max_lag=50):
 def test_normality(samples):
     """Anderson-Darling test for normality."""
     from scipy import stats
-    try:
-        result = stats.anderson(samples, dist='norm')
-        # Use 5% significance level (index 2)
-        is_normal = result.statistic < result.critical_values[2]
-        return {
-            'statistic': result.statistic,
-            'critical_5pct': result.critical_values[2],
-            'pass': is_normal,
-        }
-    except ImportError:
-        # scipy not available, skip
-        return {'pass': None, 'note': 'scipy not installed, skipping Anderson-Darling'}
+    result = stats.anderson(samples, dist='norm')
+    # Use 5% significance level (index 2)
+    is_normal = result.statistic < result.critical_values[2]
+    return {
+        'statistic': result.statistic,
+        'critical_5pct': result.critical_values[2],
+        'pass': is_normal,
+    }
 
 
 def main():
@@ -126,11 +122,8 @@ def main():
     # Normality test
     print(f"\n=== Normality (Anderson-Darling) ===")
     norm_result = test_normality(samples)
-    if norm_result['pass'] is None:
-        print(f"  {norm_result['note']}")
-    else:
-        print(f"  Statistic: {norm_result['statistic']:.4f}  (critical 5%: {norm_result['critical_5pct']:.4f})")
-        print(f"  {'PASS' if norm_result['pass'] else 'FAIL'}")
+    print(f"  Statistic: {norm_result['statistic']:.4f}  (critical 5%: {norm_result['critical_5pct']:.4f})")
+    print(f"  {'PASS' if norm_result['pass'] else 'FAIL'}")
 
     # Overall
     all_pass = moments['mean_pass'] and moments['std_pass'] and moments['kurt_pass'] and acf_result['pass']
@@ -157,24 +150,16 @@ def main():
         axes[1].legend()
 
         # QQ plot
+        from scipy import stats
         sorted_samples = np.sort(samples)
         n = len(sorted_samples)
-        theoretical = np.array([np.sqrt(2) * np.math.erfc(2 * (i + 0.5) / n) for i in range(n)])
-        # Simple approximation: use percentile points of N(0,1)
-        from numpy import percentile
         expected = np.linspace(0.5/n, 1 - 0.5/n, n)
-        theoretical_quantiles = np.sqrt(2) * np.array([float(-np.polynomial.hermite_e.hermeval(0, [0]*20)) for _ in expected])
-        # Simpler: just use scipy if available
-        try:
-            from scipy import stats
-            theoretical_quantiles = stats.norm.ppf(expected)
-            axes[2].scatter(theoretical_quantiles, sorted_samples, s=1, alpha=0.3)
-            axes[2].plot([-4, 4], [-4, 4], 'r-', lw=2)
-            axes[2].set_title('Q-Q Plot')
-            axes[2].set_xlabel('Theoretical')
-            axes[2].set_ylabel('Sample')
-        except ImportError:
-            axes[2].text(0.5, 0.5, 'scipy needed\nfor QQ plot', transform=axes[2].transAxes, ha='center')
+        theoretical_quantiles = stats.norm.ppf(expected)
+        axes[2].scatter(theoretical_quantiles, sorted_samples, s=1, alpha=0.3)
+        axes[2].plot([-4, 4], [-4, 4], 'r-', lw=2)
+        axes[2].set_title('Q-Q Plot')
+        axes[2].set_xlabel('Theoretical')
+        axes[2].set_ylabel('Sample')
 
         plt.tight_layout()
         plt.savefig('validation_rng.png', dpi=150)

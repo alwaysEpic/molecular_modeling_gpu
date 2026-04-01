@@ -124,8 +124,7 @@ def nrmse_histogram(hit_times, a, d, Db, t_stop, num_bins=120):
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
     # Normalize using trapezoid rule, scaled by hit probability (matches MATLAB)
-    trap_func = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
-    trap_val = trap_func(counts, bin_centers / time_scale)
+    trap_val = np.trapezoid(counts, bin_centers / time_scale)
     if trap_val > 0:
         pdf_sim = counts * (p_hit / trap_val)
     else:
