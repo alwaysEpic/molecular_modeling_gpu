@@ -68,24 +68,58 @@ double run_cpu_simulation(const SimParams& p, FILE* fp_out) {
     h_x = p.start_x;
     h_y = p.start_y;
     h_z = p.start_z;
+    // D*dt for bridge probability formula
+    float Ddt = diffStep * diffStep * 0.5f;
+
     // steps loop
     for (int jj = 0; jj < numSteps; jj++) {
       rand_x = randn_h(0, 1);
       rand_y = randn_h(0, 1);
       rand_z = randn_h(0, 1);
 
+      float h_z_old = h_z;
+      float h_x_old = h_x, h_y_old = h_y;
       h_update(diffStep, driftStep, &h_x, &h_y, &h_z, rand_x, rand_y, rand_z);
+
+      // Brownian bridge uniform for boundary crossing correction
+      float u_bridge = (float)rand() / (float)RAND_MAX;
+
       if ((p.firsthit == 1 && last_CPU == 0) || p.allhit == 1) {
-        // Receiver test
-        if ((p.limit == 0) && p.rec_rad > sqrt((h_x - p.locx) * (h_x - p.locx) + (h_y - p.locy) * (h_y - p.locy) +
-                                               (h_z - p.locz) * (h_z - p.locz))) {
-          fprintf(fp_out, "%0.15f, %0.15f, %0.15f, %d, %d, \n", h_x, h_y, h_z, i, jj);
-          last_CPU = 1;
-        }
-        // 1D Limit test
-        if (p.limit > 0 && h_z > p.limit) {
-          fprintf(fp_out, "%0.15f, %0.15f, %0.15f, %d, %d, \n", h_x, h_y, h_z, i, jj);
-          last_CPU = 1;
+        if (p.limit > 0) {
+          // 1D Limit: explicit crossing
+          if (h_z > p.limit) {
+            fprintf(fp_out, "%0.15f, %0.15f, %0.15f, %d, %d, \n", h_x, h_y, h_z, i, jj);
+            last_CPU = 1;
+          }
+          // Bridge correction: both endpoints below limit
+          else if (h_z_old < p.limit && h_z < p.limit) {
+            float p_cross = expf(-(p.limit - h_z_old) * (p.limit - h_z) / Ddt);
+            if (u_bridge < p_cross) {
+              fprintf(fp_out, "%0.15f, %0.15f, %0.15f, %d, %d, \n", h_x, h_y, p.limit, i, jj);
+              last_CPU = 1;
+            }
+          }
+        } else {
+          // Spherical receiver: explicit crossing
+          float r_new = sqrtf((h_x - p.locx) * (h_x - p.locx) + (h_y - p.locy) * (h_y - p.locy) +
+                              (h_z - p.locz) * (h_z - p.locz));
+          if (p.rec_rad > r_new) {
+            fprintf(fp_out, "%0.15f, %0.15f, %0.15f, %d, %d, \n", h_x, h_y, h_z, i, jj);
+            last_CPU = 1;
+          } else {
+            // Bridge correction: both endpoints outside sphere
+            float r_old = sqrtf((h_x_old - p.locx) * (h_x_old - p.locx) + (h_y_old - p.locy) * (h_y_old - p.locy) +
+                                (h_z_old - p.locz) * (h_z_old - p.locz));
+            if (r_old > p.rec_rad) {
+              float d_old = r_old - p.rec_rad;
+              float d_new = r_new - p.rec_rad;
+              float p_cross = expf(-d_old * d_new / Ddt);
+              if (u_bridge < p_cross) {
+                fprintf(fp_out, "%0.15f, %0.15f, %0.15f, %d, %d, \n", h_x, h_y, h_z, i, jj);
+                last_CPU = 1;
+              }
+            }
+          }
         }
       } else if (p.everything) {
         fprintf(fp_out, "%0.15f, %0.15f, %0.15f\n", h_x, h_y, h_z);

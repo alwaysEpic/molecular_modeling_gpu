@@ -141,10 +141,18 @@ __global__ void d_simulate_isolated(long long rng_seed, float diffStep, float dr
     float y_next = diffStep * rn.y;
     float z_next = diffStep * rn.z + driftStep;
 
-    float x_last = px, y_last = py;
+    // Save pre-step positions for bridge correction and wall reflection
+    float x_last = px, y_last = py, pz_old = pz;
     px += x_next;
     py += y_next;
     pz += z_next;
+
+    // Brownian bridge uniform: transform unused 4th normal to U(0,1)
+    // via the normal CDF. erff() is a hardware instruction (MUFU) on CUDA.
+    float u_bridge = 0.5f * (1.0f + erff(rn.w * 0.70710678118f));
+
+    // D*dt for bridge probability formula (derived from diffStep = sqrt(2*D*dt))
+    float Ddt = diffStep * diffStep * 0.5f;
 
     // Wall reflection
     if (walls && sqrtf(px * px + py * py) > radius) {
@@ -154,24 +162,64 @@ __global__ void d_simulate_isolated(long long rng_seed, float diffStep, float dr
       py = refl_y;
     }
 
-    // Hit detection — write to global memory only on hit
+    // Hit detection with Brownian bridge correction
+    // The bridge detects crossings where both endpoints are on the same side
+    // of the boundary but the continuous path crossed and returned.
+    // P_cross = exp(-(c-a)*(c-b) / (D*dt))
+    // Formula is drift-independent (Revuz & Yor, Prop. IX.3.8).
+    // See docs/brownian_bridge.md for full derivation and references.
     if (!hit) {
-      if (limit > 0 && pz > limit) {
-        d_hit_flag[idx] = 1;
-        d_hit_step[idx] = t;
-        d_hit_x[idx] = px;
-        d_hit_y[idx] = py;
-        d_hit_z[idx] = pz;
-        hit = 1;
-      } else if (limit == 0) {
-        float dx = px - locx, dy = py - locy, dz = pz - locz;
-        if (rec_rad > sqrtf(dx * dx + dy * dy + dz * dz)) {
+      if (limit > 0) {
+        if (pz > limit) {
+          // Explicit crossing — endpoint past boundary
           d_hit_flag[idx] = 1;
           d_hit_step[idx] = t;
           d_hit_x[idx] = px;
           d_hit_y[idx] = py;
           d_hit_z[idx] = pz;
           hit = 1;
+        } else if (pz_old < limit && pz < limit) {
+          // Bridge correction: both endpoints below limit, but continuous
+          // path may have crossed and returned (Gobet 2000, NAM 1984)
+          float p_cross = __expf(-(limit - pz_old) * (limit - pz) / Ddt);
+          if (u_bridge < p_cross) {
+            d_hit_flag[idx] = 1;
+            d_hit_step[idx] = t;
+            d_hit_x[idx] = px;
+            d_hit_y[idx] = py;
+            d_hit_z[idx] = limit;  // particle crossed at the boundary
+            hit = 1;
+          }
+        }
+      } else {
+        // Spherical receiver: tangent-plane approximation (NAM 1984)
+        float dx = px - locx, dy = py - locy, dz = pz - locz;
+        float r_new = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (rec_rad > r_new) {
+          // Explicit crossing — endpoint inside sphere
+          d_hit_flag[idx] = 1;
+          d_hit_step[idx] = t;
+          d_hit_x[idx] = px;
+          d_hit_y[idx] = py;
+          d_hit_z[idx] = pz;
+          hit = 1;
+        } else {
+          // Bridge correction: both endpoints outside sphere
+          float dx_old = x_last - locx, dy_old = y_last - locy, dz_old = pz_old - locz;
+          float r_old = sqrtf(dx_old * dx_old + dy_old * dy_old + dz_old * dz_old);
+          if (r_old > rec_rad) {
+            float d_old = r_old - rec_rad;
+            float d_new = r_new - rec_rad;
+            float p_cross = __expf(-d_old * d_new / Ddt);
+            if (u_bridge < p_cross) {
+              d_hit_flag[idx] = 1;
+              d_hit_step[idx] = t;
+              d_hit_x[idx] = px;
+              d_hit_y[idx] = py;
+              d_hit_z[idx] = pz;
+              hit = 1;
+            }
+          }
         }
       }
     }
