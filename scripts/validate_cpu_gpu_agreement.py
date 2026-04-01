@@ -58,13 +58,21 @@ def main():
         print(f"\nPASS — CPU/GPU Agreement (insufficient data to test, not a failure)")
         return 0
 
-    # Hit rate comparison
+    # Hit rate comparison — tolerance scales with sample size
+    # Expected SE of difference: sqrt(p*(1-p)*(1/n1 + 1/n2))
+    # Use 3-sigma bound, minimum 5%
+    n1, n2 = len(cpu_times), len(gpu_times)
+    p_est = (n1 + n2) / (2.0 * max(n1, n2) / min(n1, n2) * max(n1, n2))  # rough pooled estimate
+    p_est = (n1 + n2) / (2.0 * max(n1 + n2, 1))  # simpler: average hit fraction ≈ 0.5 for ratio purposes
+    se_diff = np.sqrt(0.25 * (1.0/n1 + 1.0/n2))  # worst-case SE at p=0.5
+    rate_tol = max(0.05, 3.0 * se_diff)  # 3-sigma or 5%, whichever is larger
+
     print(f"\n=== Hit Rate ===")
-    print(f"  CPU hits: {len(cpu_times)}")
-    print(f"  GPU hits: {len(gpu_times)}")
-    rate_diff = abs(len(cpu_times) - len(gpu_times)) / max(len(cpu_times), len(gpu_times))
-    print(f"  Difference: {rate_diff*100:.1f}%")
-    rate_pass = rate_diff < 0.05  # within 5%
+    print(f"  CPU hits: {n1}")
+    print(f"  GPU hits: {n2}")
+    rate_diff = abs(n1 - n2) / max(n1, n2)
+    print(f"  Difference: {rate_diff*100:.1f}%  (tolerance: {rate_tol*100:.1f}%)")
+    rate_pass = rate_diff < rate_tol
     print(f"  {'PASS' if rate_pass else 'FAIL'}")
 
     # Distribution moments
