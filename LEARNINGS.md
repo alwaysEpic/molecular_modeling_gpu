@@ -22,8 +22,18 @@ Notes and lessons learned during development.
 ### Float/double mismatch in d_reflection (2026-04-01)
 Using `powf`, `sqrtf`, `sinf`, `cosf` (float precision) but storing in `double` variables. Gives false confidence in precision — intermediate results are truncated to float. Use matching precision throughout.
 
-### RNG re-initialization per kernel call (2026-04-01)
-`curand_init(clock64(), idx, 0, &state)` called every timestep, every thread. This was a deliberate thesis-era solution, not an oversight — switching from `curandState_t` (XORWOW, ~48 byte state, slow init) to `curandStatePhilox4_32_10_t` (small state, fast init) combined with `clock64()` seeding was a breakthrough that significantly improved performance. The `clock64()` seed ensured each kernel call got fresh randomness without needing to manage persistent state across calls. It was validated with cross-correlation analysis against MATLAB's randn. Fixed with persistent curandState array allocated once and passed to kernel — same Philox generator, just initialized once instead of per-call. Validated against thesis RNG tests (moments, autocorrelation, Anderson-Darling normality).
+### RNG: per-call clock64() is faster than persistent state (2026-04-01)
+The thesis approach of `curand_init(clock64(), idx, 0, &state)` per kernel call was deliberately chosen and is **4-5x faster** than persistent RNG state on a T4. A/B test results (10k particles × 10k steps, same session):
+- Per-call clock64(): ~27ms
+- Persistent state (global memory): ~117ms
+
+**Why:** Philox state created on the stack lives in registers (~1 cycle access). Persistent state in global memory costs ~400-800 cycles per read/write. The `curand_init` cost for Philox is cheap (counter-based, just sets a few integers) — much less than the global memory round-trip of 64 bytes × 2 (read+write) × 10k threads per timestep.
+
+The thesis breakthrough was two things working together:
+1. Choosing Philox (cheap init) over XORWOW (expensive init)
+2. Using `clock64()` for fresh seeds without persistent state
+
+Trade-off: `clock64()` can produce correlated streams when threads launch at the same clock tick, but thesis validation (cross-correlation vs MATLAB randn) confirmed acceptable quality for the physics. When `--seed` is provided, we use the fixed seed instead of `clock64()` for reproducibility — same performance, deterministic output.
 
 ## Performance
 
@@ -31,4 +41,4 @@ Using `powf`, `sqrtf`, `sinf`, `cosf` (float precision) but storing in `double` 
 - GPU speedup scales with simulation length: more timesteps = more amortized kernel launch overhead.
 - CPU cleanup (stack vars, reduced redundant sqrt calls) gave ~2x CPU speedup.
 - Apple Silicon M-series is ~2x faster than Colab Xeon for single-threaded CPU work.
-- Persistent RNG saves ~100 cycles/thread/step but is small relative to total kernel time at current scale. Will matter more with persistent kernel optimization.
+- **Per-call Philox RNG with clock64() is 4-5x faster than persistent state** — register-local stack state beats global memory round-trips. Don't assume "initialize once" is always faster; memory hierarchy matters more than init cost for lightweight RNGs.
