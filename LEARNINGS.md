@@ -23,7 +23,7 @@ Notes and lessons learned during development.
 Using `powf`, `sqrtf`, `sinf`, `cosf` (float precision) but storing in `double` variables. Gives false confidence in precision — intermediate results are truncated to float. Use matching precision throughout.
 
 ### RNG re-initialization per kernel call (2026-04-01)
-`curand_init(clock64(), idx, 0, &state)` called every timestep, every thread. The `clock64()` seed was a workaround for non-persistent state — threads at the same clock tick could get correlated streams. Fixed with persistent curandState array allocated once and passed to kernel. Validated against thesis RNG tests (moments, autocorrelation, Anderson-Darling normality). The original approach was deliberately chosen and validated during the thesis, not an oversight.
+`curand_init(clock64(), idx, 0, &state)` called every timestep, every thread. This was a deliberate thesis-era solution, not an oversight — switching from `curandState_t` (XORWOW, ~48 byte state, slow init) to `curandStatePhilox4_32_10_t` (small state, fast init) combined with `clock64()` seeding was a breakthrough that significantly improved performance. The `clock64()` seed ensured each kernel call got fresh randomness without needing to manage persistent state across calls. It was validated with cross-correlation analysis against MATLAB's randn. Fixed with persistent curandState array allocated once and passed to kernel — same Philox generator, just initialized once instead of per-call. Validated against thesis RNG tests (moments, autocorrelation, Anderson-Darling normality).
 
 ## Performance
 
