@@ -114,6 +114,16 @@ itself.
 ## Histogram NRMSE (supplementary)
 
 Kept for human-readable output and backward compatibility with thesis validation
-approach. Not used as pass/fail criterion. Normalization:
+approach. Not used as pass/fail criterion. Only displayed when >= 1000 hits are
+available — below this threshold the histogram is too sparse for NRMSE to be
+informative (dominated by shot noise, not systematic error).
+
+Theoretical basis: histogram MISE converges as O(n^{-2/3}) for optimal bin width
+(Wasserman 2004, "All of Statistics", Theorem 20.9). This gives RMSE ~ O(n^{-1/3}).
+For NRMSE < 10%, need n >= 1000. For heavy-tailed distributions like the inverse
+Gaussian, n >= 5000 is preferred (Silverman 1986, Section 2.5). The chi-squared
+"5 expected events per bin" rule (Cochran 1954) with 120 bins requires n >= 600.
+
+Normalization:
 - 1D (Pr(hit)=1): counts / (sum(counts) * deltaT)
 - 3D (Pr(hit)<1): counts * (prob_hit / trapz(counts, t_seconds))

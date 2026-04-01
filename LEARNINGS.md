@@ -65,7 +65,7 @@ Items identified during deep review, to be addressed:
 2. CSV NaN filtering — scripts don't skip headers, MATLAB skips 2 rows
 3. ~~np.trapezoid compatibility~~ (done — pinned numpy>=2.0, scipy>=1.11 in requirements.txt)
 4. ~~Dead QQ plot code in validate_rng.py~~ (done — removed dead code, dropped try/except for scipy since it's pinned)
-5. 3D test at 1k paths — only ~200 hits across 120 bins is meaningless
+5. ~~3D test at 1k paths~~ (done — NRMSE gated to >= 1000 hits per Wasserman 2004 Theorem 20.9: histogram RMSE converges O(n^{-1/3}), below 1000 dominated by shot noise)
 6. Wall reflection validation — TobyThesisTest_walls.m not ported
 7. Multi-parameter 1D test — TobyThesisTest_dist.m uses different params
 8. Timestep convergence test — no test validates dt sensitivity

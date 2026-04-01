@@ -136,9 +136,16 @@ def main():
     print(f"  {'PASS' if ks_pass else 'FAIL'}")
 
     # Supplementary: NRMSE on histogram
-    nrmse, pdf_sim, bin_centers = nrmse_histogram(hit_times, args.dist, args.db, args.vel)
-    print(f"\n=== NRMSE (supplementary) ===")
-    print(f"  Normalized RMSE: {nrmse:.4f}")
+    # Only meaningful with >= 1000 hits. Histogram RMSE converges as O(n^{-1/3})
+    # (Wasserman 2004, Theorem 20.9). Below 1000 hits the histogram is too sparse
+    # for NRMSE to be informative — dominated by shot noise, not systematic error.
+    nrmse, pdf_sim, bin_centers = None, None, None
+    if len(hit_times) >= 1000:
+        nrmse, pdf_sim, bin_centers = nrmse_histogram(hit_times, args.dist, args.db, args.vel)
+        print(f"\n=== NRMSE (supplementary, n={len(hit_times)}) ===")
+        print(f"  Normalized RMSE: {nrmse:.4f}")
+    else:
+        print(f"\n  (NRMSE suppressed — {len(hit_times)} hits < 1000 minimum for meaningful histogram density estimation)")
 
     # Overall
     print(f"\n{'PASS' if ks_pass else 'FAIL'} - 1D first-hit validation (KS p={ks_pvalue:.4f})")
@@ -154,13 +161,13 @@ def main():
 
         # PDF comparison
         if pdf_sim is not None and bin_centers is not None:
-            delta_t = (bin_centers[1] - bin_centers[0]) / time_scale
             axes[0].plot(bin_centers, pdf_sim, 'k', linewidth=2, label='Simulation')
         axes[0].plot(tt * time_scale, pdf_analytical, 'r--', linewidth=2, label='Analytical')
         axes[0].set_xlabel('time (msec)', fontsize=14)
         axes[0].set_ylabel('p_passage(t)', fontsize=14)
         axes[0].legend(fontsize=12)
-        axes[0].set_title(f'PDF Comparison (NRMSE={nrmse:.4f})')
+        nrmse_label = f'NRMSE={nrmse:.4f}' if nrmse is not None else 'NRMSE n/a (< 1000 hits)'
+        axes[0].set_title(f'PDF Comparison ({nrmse_label})')
 
         # CDF comparison (what KS test actually compares)
         from scipy.stats import invgauss

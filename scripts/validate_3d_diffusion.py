@@ -204,9 +204,16 @@ def main():
         all_pass = False
 
     # Supplementary: NRMSE
-    nrmse, pdf_sim, bin_centers = nrmse_histogram(hit_times, a, d, args.db, args.timestop)
-    print(f"\n=== NRMSE (supplementary) ===")
-    print(f"  Normalized RMSE: {nrmse:.4f}")
+    # Only meaningful with >= 1000 hits. Histogram RMSE converges as O(n^{-1/3})
+    # (Wasserman 2004, Theorem 20.9). Below 1000 hits the histogram is too sparse
+    # for NRMSE to be informative — dominated by shot noise, not systematic error.
+    nrmse, pdf_sim, bin_centers = None, None, None
+    if len(hit_times) >= 1000:
+        nrmse, pdf_sim, bin_centers = nrmse_histogram(hit_times, a, d, args.db, args.timestop)
+        print(f"\n=== NRMSE (supplementary, n={len(hit_times)}) ===")
+        print(f"  Normalized RMSE: {nrmse:.4f}")
+    else:
+        print(f"\n  (NRMSE suppressed — {len(hit_times)} hits < 1000 minimum for meaningful histogram density estimation)")
 
     print(f"\n{'PASS' if all_pass else 'FAIL'} - 3D diffusion validation (KS p={ks_pvalue:.4f})")
 
@@ -227,7 +234,8 @@ def main():
         axes[0].set_xlabel('time (msec)', fontsize=14)
         axes[0].set_ylabel('$H_{Diff}(t|d,t_0)$', fontsize=14)
         axes[0].legend(fontsize=12)
-        axes[0].set_title(f'PDF Comparison (NRMSE={nrmse:.4f})')
+        nrmse_label = f'NRMSE={nrmse:.4f}' if nrmse is not None else 'NRMSE n/a (< 1000 hits)'
+        axes[0].set_title(f'PDF Comparison ({nrmse_label})')
 
         # CDF comparison
         cdf_func = build_conditional_cdf(a, d, args.db, args.timestop)
