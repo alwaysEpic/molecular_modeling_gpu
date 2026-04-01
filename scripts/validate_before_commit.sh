@@ -80,6 +80,15 @@ else
     report "FAIL" "3D diffusion-only validation (CPU, KS + binomial, 1k paths)"
 fi
 
+# Test 2b: Position distribution validation (D-estimation)
+echo "=== Test 2b: CPU Position Distribution (2k particles) ==="
+RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_position_distribution.py" --binary "$BUILD_DIR/mc_sim_cpu" --no-plot 2>&1 | grep -E "^PASS|^FAIL")
+if echo "$RESULT" | grep -q "^PASS"; then
+    report "PASS" "Position distribution (CPU, D-estimation, 2k particles)"
+else
+    report "FAIL" "Position distribution (CPU, D-estimation, 2k particles)"
+fi
+
 # Test 3: CPU RNG quality
 echo "=== Test 3: CPU RNG Quality ==="
 if [ -f "$BUILD_DIR/dump_rng_cpu" ] || g++ -O2 -o "$BUILD_DIR/dump_rng_cpu" "$SCRIPT_DIR/dump_rng_cpu.cpp" -lm 2>/dev/null; then
