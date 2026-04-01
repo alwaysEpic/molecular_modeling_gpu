@@ -19,6 +19,7 @@ static const struct option cli_options[] = {{"all-hit", no_argument, nullptr, 'a
                                             {"limit", no_argument, nullptr, 'l'},
                                             {"nodrift", no_argument, nullptr, 'n'},
                                             {"radius", required_argument, nullptr, 'r'},
+                                            {"seed", required_argument, nullptr, 'S'},
                                             {"time", required_argument, nullptr, 't'},
                                             {"verbose", no_argument, nullptr, 'v'},
                                             {"walls", no_argument, nullptr, 'w'},
@@ -41,6 +42,7 @@ static inline void displayUsage(const char* program_name) {
   printf("\t -l --limit\t\tRecords first hit based on distance limit\n");
   printf("\t -n --nodrift\t\tTurns off laminar flow\n");
   printf("\t -r --radius\t\tSets the radius for the blood vessel walls. Must be used with --walls to have effect\n");
+  printf("\t -S --seed\t\tSet RNG seed for reproducibility. Default 0 (time-based)\n");
   printf("\t -t --time\t\tSets simulation time\n");
   printf("\t -v --verbose\t\tProvides addition data about the simulation\n");
   printf("\t -w --walls\t\tSimulates particle motion in blood vessel of default radius\n");
@@ -58,7 +60,7 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
   int longindex = 0;
   int opt;
 
-  while ((opt = getopt_long(argc, argv, "ab:cs:efhi:l:nr:t:vw", cli_options, &longindex)) != -1) {
+  while ((opt = getopt_long(argc, argv, "ab:cs:efhi:l:nr:S:t:vw", cli_options, &longindex)) != -1) {
     switch (opt) {
       case 'a':
         p.allhit = 1;
@@ -114,6 +116,9 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
           inputError("Radius");
         }
         break;
+      case 'S':
+        p.seed = atoll(optarg);
+        break;
       case 't':
         p.time_in = atof(optarg);
         if (p.time_in <= 0) {
@@ -140,6 +145,7 @@ static inline void printVerbose(const SimParams& p) {
   printf("Wall Radius: %0.15f\n", p.radius);
   printf("Stop Time: %0.10f\n", p.time_in);
   printf("Velocity: %0.10f\n", p.velocity);
+  printf("RNG Seed: %lld%s\n", p.seed, p.seed == 0 ? " (time-based)" : "");
 }
 
 #endif

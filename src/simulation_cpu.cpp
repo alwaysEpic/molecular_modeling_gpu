@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "common/params.h"
 #include "timing.h"
@@ -45,6 +46,13 @@ static void h_update(float Db, float deltaT, float velocity, float* h_x, float* 
 
 double run_cpu_simulation(const SimParams& p, FILE* fp_out) {
   int numSteps = lround(p.time_in / p.deltaT);
+
+  // Seed RNG
+  if (p.seed != 0) {
+    srand((unsigned)p.seed);
+  } else {
+    srand((unsigned)time(nullptr));
+  }
 
   float h_x, h_y, h_z;
   float rand_x = 0, rand_y = 0, rand_z = 0;

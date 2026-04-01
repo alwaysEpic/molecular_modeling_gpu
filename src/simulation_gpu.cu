@@ -3,11 +3,19 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include <vector>
 
 #include "common/params.h"
 #include "simulation_gpu.h"
+
+// Initialize one RNG state per particle — called once before the simulation loop
+__global__ void init_rng(curandStatePhilox4_32_10_t* rng, long long seed, int iter) {
+  long long idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= iter) return;
+  curand_init(seed, idx, 0, &rng[idx]);
+}
 
 __device__ void d_reflection(float x1, float y1, float x0, float y0, double* x_new, double* y_new, float radius) {
   double x_diff = (x1 - x0);
@@ -28,10 +36,10 @@ __device__ void d_reflection(float x1, float y1, float x0, float y0, double* x_n
   *y_new = y_t + (sin(phiAngle) * (-A_rho) + cos(phiAngle) * A_phi);
 }
 
-__global__ void d_update(float Db, float deltaT, int iter, float* d_x, float* d_y, float* d_z, float velocity,
-                         int walls, float radius, int start_flag, int t_step, int* d_hit_flag, int* d_hit_step,
-                         float* d_hit_x, float* d_hit_y, float* d_hit_z, float limit, float rec_rad, float locx,
-                         float locy, float locz, int firsthit) {
+__global__ void d_update(curandStatePhilox4_32_10_t* rng, float Db, float deltaT, int iter, float* d_x, float* d_y,
+                         float* d_z, float velocity, int walls, float radius, int start_flag, int t_step,
+                         int* d_hit_flag, int* d_hit_step, float* d_hit_x, float* d_hit_y, float* d_hit_z, float limit,
+                         float rec_rad, float locx, float locy, float locz, int firsthit) {
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= iter) return;
 
@@ -41,13 +49,10 @@ __global__ void d_update(float Db, float deltaT, int iter, float* d_x, float* d_
   float x_next, y_next, z_next;
   float x_last, y_last;
 
-  // Initialize RNG
-  curandStatePhilox4_32_10_t state;
-  curand_init(clock64(), idx, 0, &state);
-
-  float r_x = curand_normal(&state);
-  float r_y = curand_normal(&state);
-  float r_z = curand_normal(&state);
+  // Draw from persistent per-thread RNG state
+  float r_x = curand_normal(&rng[idx]);
+  float r_y = curand_normal(&rng[idx]);
+  float r_z = curand_normal(&rng[idx]);
 
   x_next = sqrt(2 * Db * deltaT) * r_x;
   y_next = sqrt(2 * Db * deltaT) * r_y;
@@ -84,7 +89,7 @@ __global__ void d_update(float Db, float deltaT, int iter, float* d_x, float* d_
   }
 
   // Hit detection (device-side)
-  if (d_hit_flag[idx]) return;  // already hit (for non-firsthit modes that still track)
+  if (d_hit_flag[idx]) return;
 
   // 1D Limit test
   if (limit > 0 && d_z[idx] > limit) {
@@ -115,11 +120,23 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   int numSteps = lround(p.time_in / p.deltaT);
   int gridSize = (p.iter + p.blockSize - 1) / p.blockSize;
 
+  // RNG seed: use provided seed or fall back to time
+  long long seed = p.seed;
+  if (seed == 0) {
+    seed = (long long)time(nullptr);
+  }
+
   // Device position arrays
   float *d_x, *d_y, *d_z;
   cudaMalloc(&d_x, p.iter * sizeof(float));
   cudaMalloc(&d_y, p.iter * sizeof(float));
   cudaMalloc(&d_z, p.iter * sizeof(float));
+
+  // Persistent RNG state — one per particle, initialized once
+  curandStatePhilox4_32_10_t* d_rng;
+  cudaMalloc(&d_rng, p.iter * sizeof(curandStatePhilox4_32_10_t));
+  init_rng<<<gridSize, p.blockSize>>>(d_rng, seed, p.iter);
+  cudaDeviceSynchronize();
 
   // Device hit detection arrays
   int *d_hit_flag, *d_hit_step;
@@ -155,7 +172,7 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   cudaEventRecord(start);
 
   for (int t_count = 0; t_count < numSteps; t_count++) {
-    d_update<<<gridSize, p.blockSize>>>(p.Db, p.deltaT, p.iter, d_x, d_y, d_z, p.velocity, p.walls, p.radius,
+    d_update<<<gridSize, p.blockSize>>>(d_rng, p.Db, p.deltaT, p.iter, d_x, d_y, d_z, p.velocity, p.walls, p.radius,
                                         start_flag, t_count, d_hit_flag, d_hit_step, d_hit_x, d_hit_y, d_hit_z,
                                         p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit);
 
@@ -232,6 +249,7 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   cudaFree(d_x);
   cudaFree(d_y);
   cudaFree(d_z);
+  cudaFree(d_rng);
   cudaFree(d_hit_flag);
   cudaFree(d_hit_step);
   cudaFree(d_hit_x);

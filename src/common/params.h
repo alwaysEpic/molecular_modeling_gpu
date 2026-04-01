@@ -20,6 +20,7 @@ struct SimParams {
   int iter;       // Number of particle paths
   int blockSize;  // GPU block size
   float limit;    // Distance limit for 1D hit test
+  long long seed; // RNG seed (0 = use time-based seed)
 
   // Flags
   int verbose;
@@ -51,6 +52,7 @@ static inline SimParams defaultParams() {
   p.iter = 1000;
   p.blockSize = 128;
   p.limit = 0.0f;
+  p.seed = 0;
 
   // Flags
   p.verbose = 0;
