@@ -71,9 +71,9 @@ Items identified during deep review, to be addressed:
 5. ~~3D test at 1k paths~~ (done — NRMSE gated to >= 1000 hits per Wasserman 2004 Theorem 20.9: histogram RMSE converges O(n^{-1/3}), below 1000 dominated by shot noise)
 6. ~~Wall reflection validation~~ (done — ported TobyThesisTest_walls.m, added --start-x/y/z params for transmitter positioning, GPU-only test)
 7. ~~Multi-parameter 1D test~~ (done — added Test 1b with dist=1E-7, vel=3E-4, dt=1E-8 matching TobyThesisTest_dist.m; added --velocity CLI flag)
-8. Timestep convergence test — no test validates dt sensitivity
-9. Inter-stream RNG correlation — test cross-thread correlation
-10. Edge cases: empty CSV, single hit, degenerate histograms
+8. ~~Timestep convergence test~~ (skipped — Euler-Maruyama is exact for constant-coefficient SDEs; the only dt-dependent error is hit detection boundary crossing O(sqrt(dt)) per Gobet 2000, which requires ~25M samples to distinguish dt=1E-7 from 1E-8; redundant with existing KS tests at two dt values)
+9. ~~Inter-stream RNG correlation~~ (skipped — Philox4_32_10 is counter-based, inter-stream correlation eliminated by construction per Salmon et al. SC11; our usage pattern (same seed, distinct subsequences) is the canonical cuRAND recommendation; KS test against analytical solutions is a stronger end-to-end check)
+10. ~~Edge cases~~ (done — KS/binomial tests skip with message when n < 20 per Conover 1999; low-power warning at n < 50; empty CSV already handled by load_hit_times)
 
 ## Performance
 

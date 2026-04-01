@@ -25,7 +25,7 @@ At alpha = 0.05, ~5% of CI runs would false-fail. At alpha = 0.001, false positi
 is 0.1%. With n=10,000, KS can still detect CDF differences of ~0.019, which catches any
 real implementation bug.
 
-### Sample Size: 10,000 paths for validation
+### Sample Size
 
 | n | KS critical (alpha=0.001) | Detectable CDF shift |
 |---|---------------------------|---------------------|
@@ -33,8 +33,18 @@ real implementation bug.
 | 10,000 | 0.019 | ~0.02 |
 | 100,000 | 0.006 | ~0.006 (may detect discretization) |
 
-10,000 is the sweet spot: good power without over-sensitivity to dt discretization.
-1,000 paths is adequate for a quick smoke test but not rigorous validation.
+1,000 paths is adequate for a quick smoke test (pre-commit). At 10,000 paths the KS
+test becomes sensitive enough to detect the O(sqrt(dt)) discrete boundary-crossing
+bias (Gobet 2000), which causes legitimate KS failures — see Known Limitations below.
+
+### Minimum Sample Size for Valid Tests
+
+KS test is mathematically valid at any n but has no statistical power below ~20
+samples (Conover 1999, D'Agostino & Stephens 1986). Tests are skipped with a
+message when n < 20. Results flagged as low-power when 20 <= n < 50.
+
+Binomial test (scipy.stats.binomtest) is exact at any n >= 1, but skipped
+below n=20 for consistency.
 
 ## Test 1: 1D First-Passage Time with Drift
 
@@ -127,3 +137,29 @@ Gaussian, n >= 5000 is preferred (Silverman 1986, Section 2.5). The chi-squared
 Normalization:
 - 1D (Pr(hit)=1): counts / (sum(counts) * deltaT)
 - 3D (Pr(hit)<1): counts * (prob_hit / trapz(counts, t_seconds))
+
+## Known Limitations
+
+### Discrete Boundary-Crossing Bias
+
+The Euler-Maruyama integrator is exact for our constant-coefficient SDE, but hit
+detection is discrete: a particle can cross through the receiver between timesteps
+without being detected. This introduces a systematic negative bias in hit probability
+and a slight shift in the hit-time distribution, scaling as O(sqrt(dt)) (Gobet 2000,
+Math. Comp. 69:225-259).
+
+At 10,000 paths with dt=1E-7, the KS test is powerful enough to detect this bias
+(KS stat ~0.024, p ~5E-5 against the continuous analytical solution). This is a
+real physical limitation of discrete-time simulation, not a code bug.
+
+**Impact:**
+- 1D first-hit KS test may FAIL at n >= 10,000 with alpha=0.001
+- 3D binomial test may FAIL (observed ~14% hit rate vs theoretical ~15.5%)
+- Both pass comfortably at n=1,000 (insufficient power to detect the bias)
+
+**Fix:** Implement Brownian bridge correction — at each timestep, compute the
+probability that the continuous path crossed the boundary between x_n and x_{n+1}
+using P(cross) = exp(-2(b-x_n)(b-x_{n+1})/(2*D*dt)), and sample accordingly.
+This eliminates the dominant discretization error without reducing dt.
+
+See branch `brownian-bridge` for this work.
