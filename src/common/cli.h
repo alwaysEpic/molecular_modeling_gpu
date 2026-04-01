@@ -27,6 +27,7 @@ static const struct option cli_options[] = {{"all-hit", no_argument, nullptr, 'a
                                             {"start-y", required_argument, nullptr, 2},
                                             {"start-z", required_argument, nullptr, 3},
                                             {"time", required_argument, nullptr, 't'},
+                                            {"velocity", required_argument, nullptr, 7},
                                             {"verbose", no_argument, nullptr, 'v'},
                                             {"walls", no_argument, nullptr, 'w'},
                                             {nullptr, 0, nullptr, 0}};
@@ -56,6 +57,7 @@ static inline void displayUsage(const char* program_name) {
   printf("\t    --start-y\t\tSet particle starting y position (m). Default 0\n");
   printf("\t    --start-z\t\tSet particle starting z position (m). Default 0\n");
   printf("\t -t --time\t\tSets simulation time\n");
+  printf("\t    --velocity\t\tSet drift velocity (m/s). Default 1E-4\n");
   printf("\t -v --verbose\t\tProvides addition data about the simulation\n");
   printf("\t -w --walls\t\tSimulates particle motion in blood vessel of default radius\n");
 
@@ -148,6 +150,9 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
         break;
       case 3:
         p.start_z = atof(optarg);
+        break;
+      case 7:
+        p.velocity = atof(optarg);
         break;
       case 't':
         p.time_in = atof(optarg);

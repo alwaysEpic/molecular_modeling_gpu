@@ -57,6 +57,18 @@ else
     report "FAIL" "1D first-hit validation (CPU, KS test, 1k paths)"
 fi
 
+# Test 1b: CPU 1D first-hit with different params (matching TobyThesisTest_dist.m)
+# dist=1E-7, vel=3E-4, timestep=1E-8 — tests different Peclet number regime
+echo "=== Test 1b: CPU 1D First-Hit Alt Params (1k paths, dt=1E-8) ==="
+./mc_sim_cpu -i 1000 -f -l 1E-7 -t 1E-3 -s 1E-8 --velocity 3E-4 > /dev/null 2>&1
+RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_h.csv \
+    --no-plot --dist 1E-7 --vel 3E-4 --timestep 1E-8 --timestop 1E-3 2>&1 | grep -E "^PASS|^FAIL")
+if echo "$RESULT" | grep -q "^PASS"; then
+    report "PASS" "1D first-hit alt params (CPU, KS test, 1k paths, dt=1E-8)"
+else
+    report "FAIL" "1D first-hit alt params (CPU, KS test, 1k paths, dt=1E-8)"
+fi
+
 # Test 2: CPU 3D spherical receiver validation (KS + binomial)
 echo "=== Test 2: CPU 3D Spherical Receiver (1k paths, no drift) ==="
 ./mc_sim_cpu -i 1000 -f -n > /dev/null 2>&1

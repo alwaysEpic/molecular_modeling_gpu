@@ -70,7 +70,7 @@ Items identified during deep review, to be addressed:
 4. ~~Dead QQ plot code in validate_rng.py~~ (done — removed dead code, dropped try/except for scipy since it's pinned)
 5. ~~3D test at 1k paths~~ (done — NRMSE gated to >= 1000 hits per Wasserman 2004 Theorem 20.9: histogram RMSE converges O(n^{-1/3}), below 1000 dominated by shot noise)
 6. ~~Wall reflection validation~~ (done — ported TobyThesisTest_walls.m, added --start-x/y/z params for transmitter positioning, GPU-only test)
-7. Multi-parameter 1D test — TobyThesisTest_dist.m uses different params
+7. ~~Multi-parameter 1D test~~ (done — added Test 1b with dist=1E-7, vel=3E-4, dt=1E-8 matching TobyThesisTest_dist.m; added --velocity CLI flag)
 8. Timestep convergence test — no test validates dt sensitivity
 9. Inter-stream RNG correlation — test cross-thread correlation
 10. Edge cases: empty CSV, single hit, degenerate histograms
