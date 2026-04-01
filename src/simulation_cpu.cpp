@@ -44,7 +44,7 @@ static void h_update(float Db, float deltaT, int numSteps, float velocity, float
 
 double run_cpu_simulation(const SimParams& p, FILE* fp_out){
 
-  int numSteps = p.time_in/p.deltaT;
+  int numSteps = (int)(p.time_in/p.deltaT + 0.5f);
 
   float * h_x = (float *)malloc(sizeof(float));
   float * h_y = (float *)malloc(sizeof(float));

@@ -81,10 +81,10 @@ int main (int argc, char * argv[]) {
       case 'v': p.verbose = 1; break;
       case 'w': p.walls = 1; break;
       case 's': p.deltaT = atof(optarg);
-          if(p.deltaT < 0){inputError("DeltaT");}
+          if(p.deltaT <= 0){inputError("DeltaT");}
           break;
       case 'i': p.iter = atoi(optarg);
-          if(p.iter < 0){inputError("Iterations");}
+          if(p.iter <= 0){inputError("Iterations");}
           break;
       case 'l': p.limit = atof(optarg);
           if(p.limit < 0){inputError("Limit");}
@@ -93,7 +93,7 @@ int main (int argc, char * argv[]) {
           if(p.radius < 0){inputError("Radius");}
           break;
       case 't': p.time_in = atof(optarg);
-          if(p.time_in < 0){inputError("Time");}
+          if(p.time_in <= 0){inputError("Time");}
           break;
       case '?': displayUsage();
       default: displayUsage();
@@ -101,7 +101,7 @@ int main (int argc, char * argv[]) {
   }
 
   //Variable output
-  int numSteps = p.time_in/p.deltaT;
+  int numSteps = (int)(p.time_in/p.deltaT + 0.5f);
   if(p.verbose == 1){
     printf("Db: %0.15f\n", p.Db);
     printf("Delta T: %0.10f\n", p.deltaT);
@@ -115,6 +115,10 @@ int main (int argc, char * argv[]) {
 
 //Output file
   FILE * fp_h = fopen("output_h.csv", "w+");
+  if(!fp_h){
+    printf("Error: could not open output file\n");
+    exit(-1);
+  }
 
 ////Serial Execution
   double scost = run_cpu_simulation(p, fp_h);

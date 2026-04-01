@@ -87,13 +87,13 @@ int main (int argc, char * argv[]) {
       case 'v': p.verbose = 1; break;
       case 'w': p.walls = 1; break;
       case 'b': p.blockSize = atoi(optarg);
-          if(p.blockSize < 0){inputError("Blocksize");}
+          if(p.blockSize <= 0){inputError("Blocksize");}
           break;
       case 's': p.deltaT = atof(optarg);
-          if(p.deltaT < 0){inputError("DeltaT");}
+          if(p.deltaT <= 0){inputError("DeltaT");}
           break;
       case 'i': p.iter = atoi(optarg);
-          if(p.iter < 0){inputError("Iterations");}
+          if(p.iter <= 0){inputError("Iterations");}
           break;
       case 'l': p.limit = atof(optarg);
           if(p.limit < 0){inputError("Limit");}
@@ -102,7 +102,7 @@ int main (int argc, char * argv[]) {
           if(p.radius < 0){inputError("Radius");}
           break;
       case 't': p.time_in = atof(optarg);
-          if(p.time_in < 0){inputError("Time");}
+          if(p.time_in <= 0){inputError("Time");}
           break;
       case '?': displayUsage();
       default: displayUsage();
@@ -110,10 +110,8 @@ int main (int argc, char * argv[]) {
   }
 
   //Variable output
-  int numSteps = p.time_in/p.deltaT;
-  // BUG: integer division truncates before ceil, can miss threads at the tail.
-  // Correct form: (p.iter + p.blockSize - 1) / p.blockSize
-  int gridSize = ceil(p.iter/p.blockSize);
+  int numSteps = (int)(p.time_in/p.deltaT + 0.5f);
+  int gridSize = (p.iter + p.blockSize - 1) / p.blockSize;
   if(p.verbose == 1){
     printf("Blocksize: %d\nGridsize: %d\n", p.blockSize, gridSize);
     printf("Db: %0.15f\n", p.Db);
@@ -129,6 +127,10 @@ int main (int argc, char * argv[]) {
 //Output files
   FILE * fp_h = fopen("output_h.csv", "w+");
   FILE * fp_d = fopen("output_d_wide.csv", "w+");
+  if(!fp_h || !fp_d){
+    printf("Error: could not open output files\n");
+    exit(-1);
+  }
 
 ////Serial Execution
   double scost = 0;

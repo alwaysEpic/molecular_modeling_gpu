@@ -7,27 +7,24 @@
 #include "common/params.h"
 #include "simulation_gpu.h"
 
-__device__ void d_reflection(float x1, float y1, float x0, float y0, double * x_new, double * y_new, float velocity, float deltaT, float radius){
+__device__ void d_reflection(float x1, float y1, float x0, float y0, double * x_new, double * y_new, float radius){
 
   double x_diff = (x1-x0);
   double y_diff = (y1-y0);
 
-   double a = powf(x_diff,2) + powf(y_diff,2);
+   double a = x_diff*x_diff + y_diff*y_diff;
    double b = 2*((x_diff)*x0 + (y_diff)*y0);
-   double c = powf(x0,2) + powf(y0,2) - powf(radius,2);
-   double t_Param = (-b + sqrtf(powf(b,2)-4*a*c))/(2*a);//(2*c)/(-b+sqrtf(powf(b,2)-4*a*c));
-   //(-b + sqrtf(powf(b,2)-4*a*c)/(2*a));//Quadradic equation
-
-   //(-b + np.sqrt(b**2-4*a*c))/(2*a)
+   double c = x0*x0 + y0*y0 - (double)radius*radius;
+   double t_Param = (-b + sqrt(b*b-4*a*c))/(2*a);
 
    double x_t = (x_diff) * t_Param + x0; //where collision with wall occurs
    double y_t = (y_diff) * t_Param + y0;
-   double phiAngle = atan2f(y_t,x_t);
+   double phiAngle = atan2(y_t,x_t);
 
-   double A_rho = cosf(phiAngle) * (x1-x_t) + sinf(phiAngle)*(y1-y_t);
-   double A_phi = -sinf(phiAngle) * (x1-x_t) + cosf(phiAngle)*(y1-y_t);
-   *x_new = x_t + (cosf(phiAngle)*(-A_rho) - sinf(phiAngle)*A_phi);
-   *y_new = y_t + (sinf(phiAngle)*(-A_rho) + cosf(phiAngle)*A_phi);
+   double A_rho = cos(phiAngle) * (x1-x_t) + sin(phiAngle)*(y1-y_t);
+   double A_phi = -sin(phiAngle) * (x1-x_t) + cos(phiAngle)*(y1-y_t);
+   *x_new = x_t + (cos(phiAngle)*(-A_rho) - sin(phiAngle)*A_phi);
+   *y_new = y_t + (sin(phiAngle)*(-A_rho) + cos(phiAngle)*A_phi);
 
 
    //float dot = (x * n_x) + (y * n_y) + (z * n_z);
@@ -86,8 +83,8 @@ __global__ void d_update(float Db, float deltaT, int iter, float * d_x, float * 
     }
 
     if(walls == 1){
-      if(sqrt(powf(abs(d_x[idx]),2) + powf(abs(d_y[idx]),2)) > radius){
-        d_reflection(x_last+x_next,y_last+y_next, x_last, y_last, x_new, y_new, velocity, deltaT, radius);
+      if(sqrtf(d_x[idx]*d_x[idx] + d_y[idx]*d_y[idx]) > radius){
+        d_reflection(x_last+x_next,y_last+y_next, x_last, y_last, x_new, y_new, radius);
 
         d_x[idx] = x_last + *x_new;
         d_y[idx] = y_last + *y_new;
@@ -113,10 +110,8 @@ __global__ void d_update(float Db, float deltaT, int iter, float * d_x, float * 
 
 float run_gpu_simulation(const SimParams& p, FILE* fp_out){
 
-  int numSteps = p.time_in/p.deltaT;
-  // BUG: integer division truncates before ceil, can miss threads at the tail.
-  // Correct form: (p.iter + p.blockSize - 1) / p.blockSize
-  int gridSize = ceil(p.iter/p.blockSize);
+  int numSteps = (int)(p.time_in/p.deltaT + 0.5f);
+  int gridSize = (p.iter + p.blockSize - 1) / p.blockSize;
 
   //arrays to transfer device data too
   float * x = (float *)malloc(p.iter*sizeof(float));
