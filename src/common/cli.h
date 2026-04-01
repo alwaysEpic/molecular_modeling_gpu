@@ -20,6 +20,9 @@ static const struct option cli_options[] = {{"all-hit", no_argument, nullptr, 'a
                                             {"nodrift", no_argument, nullptr, 'n'},
                                             {"radius", required_argument, nullptr, 'r'},
                                             {"seed", required_argument, nullptr, 'S'},
+                                            {"start-x", required_argument, nullptr, 1},
+                                            {"start-y", required_argument, nullptr, 2},
+                                            {"start-z", required_argument, nullptr, 3},
                                             {"time", required_argument, nullptr, 't'},
                                             {"verbose", no_argument, nullptr, 'v'},
                                             {"walls", no_argument, nullptr, 'w'},
@@ -43,6 +46,9 @@ static inline void displayUsage(const char* program_name) {
   printf("\t -n --nodrift\t\tTurns off laminar flow\n");
   printf("\t -r --radius\t\tSets the radius for the blood vessel walls. Must be used with --walls to have effect\n");
   printf("\t -S --seed\t\tSet RNG seed for reproducibility. Default 0 (time-based)\n");
+  printf("\t    --start-x\t\tSet particle starting x position (m). Default 0\n");
+  printf("\t    --start-y\t\tSet particle starting y position (m). Default 0\n");
+  printf("\t    --start-z\t\tSet particle starting z position (m). Default 0\n");
   printf("\t -t --time\t\tSets simulation time\n");
   printf("\t -v --verbose\t\tProvides addition data about the simulation\n");
   printf("\t -w --walls\t\tSimulates particle motion in blood vessel of default radius\n");
@@ -119,6 +125,15 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
       case 'S':
         p.seed = atoll(optarg);
         break;
+      case 1:
+        p.start_x = atof(optarg);
+        break;
+      case 2:
+        p.start_y = atof(optarg);
+        break;
+      case 3:
+        p.start_z = atof(optarg);
+        break;
       case 't':
         p.time_in = atof(optarg);
         if (p.time_in <= 0) {
@@ -146,6 +161,9 @@ static inline void printVerbose(const SimParams& p) {
   printf("Stop Time: %0.10f\n", p.time_in);
   printf("Velocity: %0.10f\n", p.velocity);
   printf("RNG Seed: %lld%s\n", p.seed, p.seed == 0 ? " (time-based)" : "");
+  if (p.start_x != 0 || p.start_y != 0 || p.start_z != 0) {
+    printf("Start Position: (%0.10f, %0.10f, %0.10f)\n", p.start_x, p.start_y, p.start_z);
+  }
 }
 
 #endif

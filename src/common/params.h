@@ -22,6 +22,11 @@ struct SimParams {
   float limit;    // Distance limit for 1D hit test
   long long seed; // RNG seed (0 = use time-based seed)
 
+  // Starting position
+  float start_x;
+  float start_y;
+  float start_z;
+
   // Flags
   int verbose;
   int compare;
@@ -53,6 +58,9 @@ static inline SimParams defaultParams() {
   p.blockSize = 128;
   p.limit = 0.0f;
   p.seed = 0;
+  p.start_x = 0.0f;
+  p.start_y = 0.0f;
+  p.start_z = 0.0f;
 
   // Flags
   p.verbose = 0;

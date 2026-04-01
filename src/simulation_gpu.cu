@@ -32,7 +32,8 @@ __device__ void d_reflection(float x1, float y1, float x0, float y0, double* x_n
 __global__ void d_update(long long rng_seed, float Db, float deltaT, int iter, float* d_x, float* d_y, float* d_z,
                          float velocity, int walls, float radius, int start_flag, int t_step, int* d_hit_flag,
                          int* d_hit_step, float* d_hit_x, float* d_hit_y, float* d_hit_z, float limit, float rec_rad,
-                         float locx, float locy, float locz, int firsthit) {
+                         float locx, float locy, float locz, int firsthit,
+                         float start_x, float start_y, float start_z) {
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= iter) return;
 
@@ -57,8 +58,8 @@ __global__ void d_update(long long rng_seed, float Db, float deltaT, int iter, f
 
   if (walls == 1) {
     if (start_flag == 0) {
-      x_last = 0;
-      y_last = 0;
+      x_last = start_x;
+      y_last = start_y;
     } else {
       x_last = d_x[idx];
       y_last = d_y[idx];
@@ -66,9 +67,9 @@ __global__ void d_update(long long rng_seed, float Db, float deltaT, int iter, f
   }
 
   if (start_flag == 0) {
-    d_x[idx] = 0.0;
-    d_y[idx] = 0.0;
-    d_z[idx] = 0.0;
+    d_x[idx] = start_x;
+    d_y[idx] = start_y;
+    d_z[idx] = start_z;
   } else {
     d_x[idx] += x_next;
     d_y[idx] += y_next;
@@ -162,7 +163,8 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
 
     d_update<<<gridSize, p.blockSize>>>(rng_seed, p.Db, p.deltaT, p.iter, d_x, d_y, d_z, p.velocity, p.walls,
                                         p.radius, start_flag, t_count, d_hit_flag, d_hit_step, d_hit_x, d_hit_y,
-                                        d_hit_z, p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit);
+                                        d_hit_z, p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit,
+                                        p.start_x, p.start_y, p.start_z);
 
     cudaError_t code = cudaGetLastError();
     if (code != cudaSuccess && p.verbose == 1)

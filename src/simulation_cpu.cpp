@@ -62,9 +62,9 @@ double run_cpu_simulation(const SimParams& p, FILE* fp_out) {
   double then = currentTime();
   // Path loop
   for (int i = 0; i < p.iter; i++) {
-    h_x = 0;
-    h_y = 0;
-    h_z = 0;
+    h_x = p.start_x;
+    h_y = p.start_y;
+    h_z = p.start_z;
     // steps loop
     for (int jj = 0; jj < numSteps; jj++) {
       rand_x = randn_h(0, 1);
