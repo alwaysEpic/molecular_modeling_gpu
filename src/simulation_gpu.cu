@@ -25,15 +25,6 @@ __device__ void d_reflection(float x1, float y1, float x0, float y0, double * x_
    double A_phi = -sin(phiAngle) * (x1-x_t) + cos(phiAngle)*(y1-y_t);
    *x_new = x_t + (cos(phiAngle)*(-A_rho) - sin(phiAngle)*A_phi);
    *y_new = y_t + (sin(phiAngle)*(-A_rho) + cos(phiAngle)*A_phi);
-
-
-   //float dot = (x * n_x) + (y * n_y) + (z * n_z);
-   //printf("Dot: %0.15f\nx,y,z,Nx,Ny,Nz: %0.15f, %0.15f,%0.15f,%0.15f,%0.15f,%0.15f\n",dot,x,y,z,*n_x,*n_y,*n_z);
-   //n_x = (x - 2) * dot * (n_x);
-   //n_y = (y - 2) * dot * (n_y);
-   //n_z = (z - 2) * dot * (n_z) + (velocity*deltaT);
-   //printf("New(IN LOOP)XYZ: %0.15f, %0.15f,%0.15f\n",*n_x,*n_y,*n_z);
-  //return vector - 2 * Vector3.Dot(vector, normal) * normal;
 }
 
 //Update function for GPU
@@ -42,23 +33,22 @@ __global__ void d_update(float Db, float deltaT, int iter, float * d_x, float * 
   //1d Grid of 1D blocks
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   float x_next, y_next, z_next;
-  //float x_norm, y_norm, z_norm;
-  float x_last, y_last;//, z_last;
+  float x_last, y_last;
 
-    if(idx < iter){ //was after _next before walls
+    if(idx < iter){
 
     // Initialize RNG https://gist.github.com/akiross/17e722c5bea92bd2c310324eac643df6
     curandStatePhilox4_32_10_t state;
     curand_init(clock64(), idx, 0, &state);
 
 
-    float r_x = curand_normal(&state);//BoxMuller();//randn_d(0, 1, idx, iter);//curand_normal(&rng1);//[blockIdx.x]);
-    float r_y = curand_normal(&state);//BoxMuller();//randn_d(0, 1, idx, iter);//randn_d(0, 1, idx, iter);//curand_normal(&rng1);//[blockIdx.x]);
-    float r_z = curand_normal(&state);//BoxMuller();//randn_d(0, 1, idx, iter);//randn_d(0, 1, idx, iter);//curand_normal(&rng1);//[blockIdx.x]);
+    float r_x = curand_normal(&state);
+    float r_y = curand_normal(&state);
+    float r_z = curand_normal(&state);
 
     x_next = sqrt(2*Db*deltaT)*r_x;
     y_next = sqrt(2*Db*deltaT)*r_y;
-    z_next = (sqrt(2*Db*deltaT)*r_z) + velocity*deltaT;//h_zDrift(velocity, deltaT);
+    z_next = (sqrt(2*Db*deltaT)*r_z) + velocity*deltaT;
 
     if(walls == 1){
       if(start_flag == 0){
@@ -88,21 +78,6 @@ __global__ void d_update(float Db, float deltaT, int iter, float * d_x, float * 
 
         d_x[idx] = x_last + *x_new;
         d_y[idx] = y_last + *y_new;
-        printf("uhhhh\n");
-
-       /* while(sqrt(powf(d_x[idx],2) + powf(d_y[idx],2)) > radius){
-          x_last -= sqrt(2*Db*deltaT)*r_x;
-          y_last -= sqrt(2*Db*deltaT)*r_y;
-          d_x[idx] = x_last;
-          d_y[idx] = y_last;
-
-          if(sqrt(powf(d_x[idx],2) + powf(d_y[idx],2)) > radius){
-            d_reflection(x_last+x_next,y_last+y_next, x_last, y_last, x_new, y_new, velocity, deltaT, radius);
-
-            d_x[idx] = *x_new;
-            d_y[idx] = *y_new;
-          }
-        }*/
       }
     }
   }
@@ -117,15 +92,13 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out){
   float * x = (float *)malloc(p.iter*sizeof(float));
   float * y = (float *)malloc(p.iter*sizeof(float));
   float * z = (float *)malloc(p.iter*sizeof(float));
-  float * hit_time = (float *)malloc(p.iter*sizeof(float));
-  float *d_x, *d_y, *d_z, *d_hit_time;
+  float *d_x, *d_y, *d_z;
   double *x_new, *y_new;
   cudaMalloc( &d_x, p.iter*sizeof(float));
   cudaMalloc( &d_y, p.iter*sizeof(float));
   cudaMalloc( &d_z, p.iter*sizeof(float));
   cudaMalloc( &x_new, sizeof(double));
   cudaMalloc( &y_new, sizeof(double));
-  cudaMalloc( &d_hit_time, p.iter*sizeof(float));
 
   //d_iterations
   int start_flag = 0;
@@ -160,18 +133,14 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out){
       if((p.firsthit == 1 && last_GPU[i_count] == 0) || p.allhit == 1){
         //Limit 1D test
         if(p.limit > 0 && z[i_count] > p.limit){
-          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, \n", x[i_count], y[i_count], z[i_count] , t_count); //(int)iter - 1
-          last_GPU[i_count] = 1;
+          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, \n", x[i_count], y[i_count], z[i_count] , t_count);          last_GPU[i_count] = 1;
         }
         //Receiver test
-        if((p.limit == 0) && p.rec_rad > sqrt(pow(x[i_count]-p.locx,2)+pow(y[i_count]-p.locy,2)+pow(z[i_count]-p.locz,2))){ //&& sphere == 1
-          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, \n", x[i_count], y[i_count], z[i_count] , t_count); //(int)iter - 1
-          last_GPU[i_count] = 1;
+        if((p.limit == 0) && p.rec_rad > sqrt(pow(x[i_count]-p.locx,2)+pow(y[i_count]-p.locy,2)+pow(z[i_count]-p.locz,2))){          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, \n", x[i_count], y[i_count], z[i_count] , t_count);          last_GPU[i_count] = 1;
         }
       }
       else if(p.everything == 1){//Print all
-        fprintf(fp_out,"%0.15f, %0.15f, %0.15f, ", x[i_count], y[i_count], z[i_count]); //(int)iter - 1
-      }
+        fprintf(fp_out,"%0.15f, %0.15f, %0.15f, ", x[i_count], y[i_count], z[i_count]);      }
     }
     //space between steps
     fprintf(fp_out, "\n");
@@ -185,13 +154,11 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out){
   free(x);
   free(y);
   free(z);
-  free(hit_time);
   cudaFree(d_x);
   cudaFree(d_y);
   cudaFree(d_z);
   cudaFree(x_new);
   cudaFree(y_new);
-  cudaFree(d_hit_time);
 
   return pcost * 0.001f;
 }

@@ -151,11 +151,6 @@ int main (int argc, char * argv[]) {
     printf("+++++++++++ The efficiency(Speedup / NumProcessorCores) is %lf\n", scost / pcost / 4);
   }
 
-  /*int timing = 1;
-  FILE * fp_t = fopen("timing.csv", "a");
-  if(timing == 1){fprintf(fp_t,"%lf, \n", pcost);}
-  fclose(fp_t);*/
-
   fclose(fp_d);
   fclose(fp_h);
 

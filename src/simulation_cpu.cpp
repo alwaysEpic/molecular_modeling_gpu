@@ -67,19 +67,15 @@ double run_cpu_simulation(const SimParams& p, FILE* fp_out){
       if((p.firsthit == 1 && last_CPU == 0) || p.allhit == 1){
 
         //Receiver test
-        if((p.limit == 0) && p.rec_rad > sqrt((*h_x-p.locx)*(*h_x-p.locx)+(*h_y-p.locy)*(*h_y-p.locy)+(*h_z-p.locz)*(*h_z-p.locz))){// && sphere == 1
-          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, %d, \n", *h_x, *h_y, *h_z , i , jj); //(int)iter - 1
-          last_CPU = 1;
+        if((p.limit == 0) && p.rec_rad > sqrt((*h_x-p.locx)*(*h_x-p.locx)+(*h_y-p.locy)*(*h_y-p.locy)+(*h_z-p.locz)*(*h_z-p.locz))){          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, %d, \n", *h_x, *h_y, *h_z , i , jj);          last_CPU = 1;
         }
         //1D Limit test
         if(p.limit > 0 && *h_z > p.limit){
-          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, %d, \n", *h_x, *h_y, *h_z , i , jj); //(int)iter - 1
-          last_CPU = 1;
+          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, %d, \n", *h_x, *h_y, *h_z , i , jj);          last_CPU = 1;
         }
       }
-      else if(p.everything){//print all
+      else if(p.everything){
         fprintf(fp_out,"%0.15f, %0.15f, %0.15f\n", *h_x, *h_y, *h_z);
-        //fprintf(fp_out,"%0.15f, %0.15f, %0.15f\n", rand_x, rand_y, rand_z);
       }
     }
     last_CPU = 0;
