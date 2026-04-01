@@ -2,12 +2,13 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
-#include "timing.h" 
+#include "timing.h"
 #include <curand.h>
 #include <curand_kernel.h>
 #include <getopt.h>
 #include <string>
 #include <vector>
+#include "common/params.h"
 using namespace std;
 
 static const struct option options[] = {
@@ -80,43 +81,41 @@ __host__ void h_update(float Db, float deltaT, int numSteps, float velocity, flo
 __global__ void d_update(float Db, float deltaT, int iter, float * d_x, float * d_y, float * d_z, double * x_new, double * y_new,float velocity, int walls, float radius, int start_flag);
 __device__ void d_reflection(float x1, float y1, float x0, float y0, double * x_new, double * y_new, float velocity, float deltaT, float radius);
 
-int main (int argc, char * argv[]) {    
+int main (int argc, char * argv[]) {
 
   //Default Variables
-  int longindex = 0, iter = 1000;
-  int opt, verbose = 0, compare = 0, walls = 0, firsthit = 0, allhit = 0, everything = 0, blockSize = 128;//, sphere = 0;
-  float time_in = 1E-3, radius = 8E-6, deltaT = 1E-7, limit = 0.0, velocity = 1E-4, Db = 1E-11;//3E-7;//1 * 0.0001; //velocity, 1E-3, 3E-4, rad 5e-7
-  float rec_rad = 10E-9, rec_distance = 50E-9, locx = 0.0, locy = 0.0, locz = rec_distance;
-
+  SimParams p = defaultParams();
+  int longindex = 0;
+  int opt;
 
   //Command-line Switch
   while ((opt = getopt_long(argc, argv, "ab:cs:efhi:l:nr:t:vw", options, &longindex)) != -1) {
     switch (opt) {
-      case 'a': allhit = 1; break;
-      case 'c': compare = 1; break;
-      case 'e': everything = 1; break;
-      case 'f': firsthit = 1; break;
+      case 'a': p.allhit = 1; break;
+      case 'c': p.compare = 1; break;
+      case 'e': p.everything = 1; break;
+      case 'f': p.firsthit = 1; break;
       case 'h': displayUsage(); break;
-      case 'n': velocity = 0.0; break;
-      case 'v': verbose = 1; break;
-      case 'w': walls = 1; break;
-      case 'b': blockSize = atoi(optarg); 
-          if(blockSize < 0){inputError("Blocksize");}
+      case 'n': p.velocity = 0.0; break;
+      case 'v': p.verbose = 1; break;
+      case 'w': p.walls = 1; break;
+      case 'b': p.blockSize = atoi(optarg);
+          if(p.blockSize < 0){inputError("Blocksize");}
           break;
-      case 's': deltaT = atof(optarg); 
-          if(deltaT < 0){inputError("DeltaT");}
+      case 's': p.deltaT = atof(optarg);
+          if(p.deltaT < 0){inputError("DeltaT");}
           break;
-      case 'i': iter = atoi(optarg); 
-          if(iter < 0){inputError("Iterations");}
+      case 'i': p.iter = atoi(optarg);
+          if(p.iter < 0){inputError("Iterations");}
           break;
-      case 'l': limit = atof(optarg); 
-          if(limit < 0){inputError("Limit");}
+      case 'l': p.limit = atof(optarg);
+          if(p.limit < 0){inputError("Limit");}
           break;
-      case 'r': radius = atof(optarg); 
-          if(radius < 0){inputError("Radius");}
-          break;  
-      case 't': time_in = atof(optarg); 
-          if(time_in < 0){inputError("Time");}
+      case 'r': p.radius = atof(optarg);
+          if(p.radius < 0){inputError("Radius");}
+          break;
+      case 't': p.time_in = atof(optarg);
+          if(p.time_in < 0){inputError("Time");}
           break;
       case '?': displayUsage();
       default: displayUsage();
@@ -124,18 +123,18 @@ int main (int argc, char * argv[]) {
   }
 
   //Variable output
-  int numSteps = time_in/deltaT;
-  int gridSize = ceil(iter/blockSize);
-  if(verbose == 1){
-    printf("Blocksize: %d\nGridsize: %d\n", blockSize, gridSize);
-    printf("Db: %0.15f\n", Db);
-    printf("Delta T: %0.10f\n", deltaT);
-    printf("Distance Limit: %0.15f\n", limit);
-    printf("Iterations: %d\n", iter);
+  int numSteps = p.time_in/p.deltaT;
+  int gridSize = ceil(p.iter/p.blockSize);
+  if(p.verbose == 1){
+    printf("Blocksize: %d\nGridsize: %d\n", p.blockSize, gridSize);
+    printf("Db: %0.15f\n", p.Db);
+    printf("Delta T: %0.10f\n", p.deltaT);
+    printf("Distance Limit: %0.15f\n", p.limit);
+    printf("Iterations: %d\n", p.iter);
     printf("Number of Steps (time/deltaT): %d\n", numSteps);
-    printf("Wall Radius: %0.15f\n", radius);
-    printf("Stop Time: %0.10f\n", time_in);
-    printf("Velocity: %0.10f\n", velocity); 
+    printf("Wall Radius: %0.15f\n", p.radius);
+    printf("Stop Time: %0.10f\n", p.time_in);
+    printf("Velocity: %0.10f\n", p.velocity);
   }
 
 ////Host Variables
@@ -148,18 +147,18 @@ int main (int argc, char * argv[]) {
 
 ////GPU Variables
   //arrays to transfer device data too
-  float * x = (float *)malloc(iter*sizeof(float));
-  float * y = (float *)malloc(iter*sizeof(float));
-  float * z = (float *)malloc(iter*sizeof(float));
-  float * hit_time = (float *)malloc(iter*sizeof(float));
+  float * x = (float *)malloc(p.iter*sizeof(float));
+  float * y = (float *)malloc(p.iter*sizeof(float));
+  float * z = (float *)malloc(p.iter*sizeof(float));
+  float * hit_time = (float *)malloc(p.iter*sizeof(float));
   float *d_x, *d_y, *d_z, *d_hit_time;
   double *x_new, *y_new;
-  cudaMalloc( &d_x, iter*sizeof(float));
-  cudaMalloc( &d_y, iter*sizeof(float));
-  cudaMalloc( &d_z, iter*sizeof(float));   
+  cudaMalloc( &d_x, p.iter*sizeof(float));
+  cudaMalloc( &d_y, p.iter*sizeof(float));
+  cudaMalloc( &d_z, p.iter*sizeof(float));
   cudaMalloc( &x_new, sizeof(double));
-  cudaMalloc( &y_new, sizeof(double));  
-  cudaMalloc( &d_hit_time, iter*sizeof(float)); 
+  cudaMalloc( &y_new, sizeof(double));
+  cudaMalloc( &d_hit_time, p.iter*sizeof(float)); 
 
 //Timing Variables
   double now, then , scost1 = 0;
@@ -171,13 +170,13 @@ int main (int argc, char * argv[]) {
 FILE * fp_h = fopen("output_h.csv", "w+");
 FILE * fp_d = fopen("output_d_wide.csv", "w+");
 
-////Serial Execution 
-  if(compare == 1){
-    
+////Serial Execution
+  if(p.compare == 1){
+
     //timing start
-    then = currentTime(); 
+    then = currentTime();
     //Path loop
-    for(int i = 0; i < iter; i++){
+    for(int i = 0; i < p.iter; i++){
       *h_x = 0; *h_y = 0; *h_z =0; //reset for next run
       //steps loop
       for(int jj = 0; jj < numSteps; jj++){
@@ -185,21 +184,21 @@ FILE * fp_d = fopen("output_d_wide.csv", "w+");
         rand_y = randn_h(0,1);
         rand_z = randn_h(0,1);
 
-        h_update(Db, deltaT, numSteps, velocity, h_x, h_y, h_z, rand_x, rand_y, rand_z);
-      	if((firsthit == 1 && last_CPU == 0) || allhit == 1){
-          
+        h_update(p.Db, p.deltaT, numSteps, p.velocity, h_x, h_y, h_z, rand_x, rand_y, rand_z);
+      	if((p.firsthit == 1 && last_CPU == 0) || p.allhit == 1){
+
           //Receiver test
-          if((limit == 0) && rec_rad > sqrt((*h_x-locx)*(*h_x-locx)+(*h_y-locy)*(*h_y-locy)+(*h_z-locz)*(*h_z-locz))){// && sphere == 1
+          if((p.limit == 0) && p.rec_rad > sqrt((*h_x-p.locx)*(*h_x-p.locx)+(*h_y-p.locy)*(*h_y-p.locy)+(*h_z-p.locz)*(*h_z-p.locz))){// && sphere == 1
             fprintf(fp_h,"%0.15f, %0.15f, %0.15f, %d, %d, \n", *h_x, *h_y, *h_z , i , jj); //(int)iter - 1
             last_CPU = 1;
           }
           //1D Limit test
-          if(limit > 0 && *h_z > limit){
+          if(p.limit > 0 && *h_z > p.limit){
             fprintf(fp_h,"%0.15f, %0.15f, %0.15f, %d, %d, \n", *h_x, *h_y, *h_z , i , jj); //(int)iter - 1
             last_CPU = 1;
           }
         }
-        else if(everything){//print all
+        else if(p.everything){//print all
         	fprintf(fp_h,"%0.15f, %0.15f, %0.15f\n", *h_x, *h_y, *h_z);
           //fprintf(fp_h,"%0.15f, %0.15f, %0.15f\n", rand_x, rand_y, rand_z);
       	}
@@ -215,8 +214,8 @@ FILE * fp_d = fopen("output_d_wide.csv", "w+");
    
    //d_iterations
    int start_flag = 0;
-   std::vector<int> last_GPU(iter);
-   
+   std::vector<int> last_GPU(p.iter);
+
    //timing start
    cudaEventCreate(&start);
    cudaEventCreate(&stop);
@@ -224,36 +223,36 @@ FILE * fp_d = fopen("output_d_wide.csv", "w+");
 
    for(int t_count = 0; t_count < numSteps; t_count++){
       //Kernel Call
-      d_update<<<gridSize,blockSize>>>(Db, deltaT, iter, d_x, d_y, d_z, x_new, y_new, velocity, walls, radius, start_flag);
-      
+      d_update<<<gridSize,p.blockSize>>>(p.Db, p.deltaT, p.iter, d_x, d_y, d_z, x_new, y_new, p.velocity, p.walls, p.radius, start_flag);
+
       //Cuda Errors
       cudaError_t code = cudaGetLastError();
-      if (code != cudaSuccess && verbose == 1) 
-          printf ("Cuda error kernel -- %s\n", cudaGetErrorString(code)); 
-      
+      if (code != cudaSuccess && p.verbose == 1)
+          printf ("Cuda error kernel -- %s\n", cudaGetErrorString(code));
+
       //Sets starting position
       if(start_flag ==0){start_flag = 1;}
-      
+
       //Copy data from CUDA memory
-      cudaMemcpy(x, d_x, iter*sizeof(float), cudaMemcpyDeviceToHost);
-      cudaMemcpy(y, d_y, iter*sizeof(float), cudaMemcpyDeviceToHost);
-      cudaMemcpy(z, d_z, iter*sizeof(float), cudaMemcpyDeviceToHost); 
-      
-      //Logic performed on data 
-      for(int i_count = 0; i_count < iter; i_count++){
-        if((firsthit == 1 && last_GPU[i_count] == 0) || allhit == 1){
+      cudaMemcpy(x, d_x, p.iter*sizeof(float), cudaMemcpyDeviceToHost);
+      cudaMemcpy(y, d_y, p.iter*sizeof(float), cudaMemcpyDeviceToHost);
+      cudaMemcpy(z, d_z, p.iter*sizeof(float), cudaMemcpyDeviceToHost);
+
+      //Logic performed on data
+      for(int i_count = 0; i_count < p.iter; i_count++){
+        if((p.firsthit == 1 && last_GPU[i_count] == 0) || p.allhit == 1){
           //Limit 1D test
-          if(limit > 0 && z[i_count] > limit){
+          if(p.limit > 0 && z[i_count] > p.limit){
             fprintf(fp_d,"%0.15f, %0.15f, %0.15f, %d, \n", x[i_count], y[i_count], z[i_count] , t_count); //(int)iter - 1
             last_GPU[i_count] = 1;
           }
           //Receiver test
-          if((limit == 0) && rec_rad > sqrt(pow(x[i_count]-locx,2)+pow(y[i_count]-locy,2)+pow(z[i_count]-locz,2))){ //&& sphere == 1
+          if((p.limit == 0) && p.rec_rad > sqrt(pow(x[i_count]-p.locx,2)+pow(y[i_count]-p.locy,2)+pow(z[i_count]-p.locz,2))){ //&& sphere == 1
             fprintf(fp_d,"%0.15f, %0.15f, %0.15f, %d, \n", x[i_count], y[i_count], z[i_count] , t_count); //(int)iter - 1
             last_GPU[i_count] = 1;
           }
         }
-        else if(everything == 1){//Print all
+        else if(p.everything == 1){//Print all
           fprintf(fp_d,"%0.15f, %0.15f, %0.15f, ", x[i_count], y[i_count], z[i_count]); //(int)iter - 1
         }
       }
@@ -267,10 +266,10 @@ FILE * fp_d = fopen("output_d_wide.csv", "w+");
    cudaEventElapsedTime(&pcost, start, stop);
 
 //Timing results 
-   if(verbose == 1){
+   if(p.verbose == 1){
     printf("+++++++++++ GPU code execution time is %lfs\n", pcost*0.001);
    }
-   if(compare == 1){
+   if(p.compare == 1){
      printf("+++++++++++ Serial code execution time (then/now) in seconds is %lf\n", scost1);
      printf("+++++++++++ The speedup(SerialTimeCost / GPUTimeCost) is %lf\n", scost1 / (pcost*0.001)); 
      printf("+++++++++++ The efficiency(Speedup / NumProcessorCores) is %lf\n", scost1 / (pcost*0.001) / 4); 
