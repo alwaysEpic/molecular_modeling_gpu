@@ -81,8 +81,10 @@ __global__ void d_update(long long rng_seed, float Db, float deltaT, int iter, f
       double refl_x, refl_y;
       d_reflection(x_last + x_next, y_last + y_next, x_last, y_last, &refl_x, &refl_y, radius);
 
-      d_x[idx] = x_last + refl_x;
-      d_y[idx] = y_last + refl_y;
+      // refl_x/y are absolute world-space positions (built from wall intersection
+      // point + reflected overshoot). Do NOT add x_last — it's already baked in.
+      d_x[idx] = refl_x;
+      d_y[idx] = refl_y;
     }
   }
 

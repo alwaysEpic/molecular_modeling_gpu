@@ -19,6 +19,9 @@ Notes and lessons learned during development.
 ### Data race on shared device pointers (2026-04-01)
 `x_new` and `y_new` in wall reflection were single device-allocated doubles shared across all threads. Multiple threads writing simultaneously produces garbage. Fixed with per-thread stack-local variables.
 
+### Wall reflection double-offset bug (2026-04-01)
+`d_reflection` returns absolute world-space coordinates (wall intersection point + reflected overshoot). But the caller did `d_x[idx] = x_last + refl_x`, double-counting x_last which is already baked into the result. Proof: particle at (8,0) reflecting off radius-10 wall correctly returns (8,0), but `8 + 8 = 16` is outside the wall. Fix: `d_x[idx] = refl_x`. This bug existed in the original Fast_wide.reflect thesis code (the `printf("uhhhh\n")` debug line was likely related). Wall reflection was discussed in the thesis but never successfully validated — all thesis validation figures are free-space tests.
+
 ### Float/double mismatch in d_reflection (2026-04-01)
 Using `powf`, `sqrtf`, `sinf`, `cosf` (float precision) but storing in `double` variables. Gives false confidence in precision — intermediate results are truncated to float. Use matching precision throughout.
 

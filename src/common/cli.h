@@ -19,6 +19,9 @@ static const struct option cli_options[] = {{"all-hit", no_argument, nullptr, 'a
                                             {"limit", no_argument, nullptr, 'l'},
                                             {"nodrift", no_argument, nullptr, 'n'},
                                             {"radius", required_argument, nullptr, 'r'},
+                                            {"rec-x", required_argument, nullptr, 4},
+                                            {"rec-y", required_argument, nullptr, 5},
+                                            {"rec-z", required_argument, nullptr, 6},
                                             {"seed", required_argument, nullptr, 'S'},
                                             {"start-x", required_argument, nullptr, 1},
                                             {"start-y", required_argument, nullptr, 2},
@@ -45,6 +48,9 @@ static inline void displayUsage(const char* program_name) {
   printf("\t -l --limit\t\tRecords first hit based on distance limit\n");
   printf("\t -n --nodrift\t\tTurns off laminar flow\n");
   printf("\t -r --radius\t\tSets the radius for the blood vessel walls. Must be used with --walls to have effect\n");
+  printf("\t    --rec-x\t\tSet receiver x position (m). Default 0\n");
+  printf("\t    --rec-y\t\tSet receiver y position (m). Default 0\n");
+  printf("\t    --rec-z\t\tSet receiver z position (m). Default rec_distance (50nm)\n");
   printf("\t -S --seed\t\tSet RNG seed for reproducibility. Default 0 (time-based)\n");
   printf("\t    --start-x\t\tSet particle starting x position (m). Default 0\n");
   printf("\t    --start-y\t\tSet particle starting y position (m). Default 0\n");
@@ -125,6 +131,15 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
       case 'S':
         p.seed = atoll(optarg);
         break;
+      case 4:
+        p.locx = atof(optarg);
+        break;
+      case 5:
+        p.locy = atof(optarg);
+        break;
+      case 6:
+        p.locz = atof(optarg);
+        break;
       case 1:
         p.start_x = atof(optarg);
         break;
@@ -142,6 +157,22 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
         break;
       default:
         displayUsage(argv[0]);
+    }
+  }
+
+  // Validate positions are inside vessel when walls are enabled
+  if (p.walls) {
+    float start_r = sqrtf(p.start_x * p.start_x + p.start_y * p.start_y);
+    if (start_r >= p.radius) {
+      printf("Error: start position (%.2e, %.2e) is outside vessel radius %.2e\n",
+             p.start_x, p.start_y, p.radius);
+      exit(-1);
+    }
+    float rec_r = sqrtf(p.locx * p.locx + p.locy * p.locy);
+    if (rec_r >= p.radius) {
+      printf("Error: receiver position (%.2e, %.2e) is outside vessel radius %.2e\n",
+             p.locx, p.locy, p.radius);
+      exit(-1);
     }
   }
 
