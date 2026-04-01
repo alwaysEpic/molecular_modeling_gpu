@@ -21,7 +21,7 @@ static float randn_h(float mu, float sigma){
   do{
       U1 = -1 + ((float) rand () / RAND_MAX) * 2;
       U2 = -1 + ((float) rand () / RAND_MAX) * 2;
-      W = pow (U1, 2) + pow (U2, 2);
+      W = U1*U1 + U2*U2;
     }while (W >= 1 || W == 0);
 
   mult = sqrt ((-2 * log (W)) / W);
@@ -34,11 +34,12 @@ static float randn_h(float mu, float sigma){
 }
 
 //Update function for CPU
-static void h_update(float Db, float deltaT, int numSteps, float velocity, float * h_x, float * h_y, float * h_z, float rand_x, float rand_y, float rand_z){
+static void h_update(float Db, float deltaT, float velocity, float * h_x, float * h_y, float * h_z, float rand_x, float rand_y, float rand_z){
 
-  *h_x += sqrt(2*Db*deltaT)*rand_x;
-  *h_y += sqrt(2*Db*deltaT)*rand_y;
-  *h_z += (sqrt(2*Db*deltaT)*rand_z) + velocity*deltaT;
+  float diffStep = sqrt(2*Db*deltaT);
+  *h_x += diffStep*rand_x;
+  *h_y += diffStep*rand_y;
+  *h_z += diffStep*rand_z + velocity*deltaT;
 
 }
 
@@ -46,9 +47,7 @@ double run_cpu_simulation(const SimParams& p, FILE* fp_out){
 
   int numSteps = (int)(p.time_in/p.deltaT + 0.5f);
 
-  float * h_x = (float *)malloc(sizeof(float));
-  float * h_y = (float *)malloc(sizeof(float));
-  float * h_z = (float *)malloc(sizeof(float));
+  float h_x, h_y, h_z;
   float rand_x = 0, rand_y = 0, rand_z = 0;
   int last_CPU = 0;
 
@@ -56,26 +55,29 @@ double run_cpu_simulation(const SimParams& p, FILE* fp_out){
   double then = currentTime();
   //Path loop
   for(int i = 0; i < p.iter; i++){
-    *h_x = 0; *h_y = 0; *h_z =0; //reset for next run
+    h_x = 0; h_y = 0; h_z = 0;
     //steps loop
     for(int jj = 0; jj < numSteps; jj++){
       rand_x = randn_h(0,1);
       rand_y = randn_h(0,1);
       rand_z = randn_h(0,1);
 
-      h_update(p.Db, p.deltaT, numSteps, p.velocity, h_x, h_y, h_z, rand_x, rand_y, rand_z);
+      h_update(p.Db, p.deltaT, p.velocity, &h_x, &h_y, &h_z, rand_x, rand_y, rand_z);
       if((p.firsthit == 1 && last_CPU == 0) || p.allhit == 1){
 
         //Receiver test
-        if((p.limit == 0) && p.rec_rad > sqrt((*h_x-p.locx)*(*h_x-p.locx)+(*h_y-p.locy)*(*h_y-p.locy)+(*h_z-p.locz)*(*h_z-p.locz))){          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, %d, \n", *h_x, *h_y, *h_z , i , jj);          last_CPU = 1;
+        if((p.limit == 0) && p.rec_rad > sqrt((h_x-p.locx)*(h_x-p.locx)+(h_y-p.locy)*(h_y-p.locy)+(h_z-p.locz)*(h_z-p.locz))){
+          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, %d, \n", h_x, h_y, h_z, i, jj);
+          last_CPU = 1;
         }
         //1D Limit test
-        if(p.limit > 0 && *h_z > p.limit){
-          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, %d, \n", *h_x, *h_y, *h_z , i , jj);          last_CPU = 1;
+        if(p.limit > 0 && h_z > p.limit){
+          fprintf(fp_out,"%0.15f, %0.15f, %0.15f, %d, %d, \n", h_x, h_y, h_z, i, jj);
+          last_CPU = 1;
         }
       }
       else if(p.everything){
-        fprintf(fp_out,"%0.15f, %0.15f, %0.15f\n", *h_x, *h_y, *h_z);
+        fprintf(fp_out,"%0.15f, %0.15f, %0.15f\n", h_x, h_y, h_z);
       }
     }
     last_CPU = 0;
@@ -84,10 +86,6 @@ double run_cpu_simulation(const SimParams& p, FILE* fp_out){
   //Timing end
   double now = currentTime();
   double elapsed = now - then;
-
-  free(h_x);
-  free(h_y);
-  free(h_z);
 
   return elapsed;
 }
