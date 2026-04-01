@@ -50,7 +50,7 @@ def run_simulation(binary, n_particles, n_steps, dt, velocity):
         '-i', str(n_particles),
         '-e',
         '-t', f'{t_stop}',
-        '-s', f'{dt}',
+        '-d', f'{dt}',
     ]
     if velocity == 0:
         cmd.append('-n')
@@ -166,8 +166,8 @@ def main():
     # directly tests the stepping kernel: does Var(x)/(2*T) = D?
     # (Allen & Tildesley; Frenkel & Smit — standard MD validation)
     #
-    # Db is hardcoded to 1E-11 in SimParams (no CLI flag).
-    # If the default changes, update db_expected here.
+    # Db default is 1E-11 in SimParams, configurable via --db flag.
+    # This test uses the default — if changed, update db_expected here.
     db_expected = 1E-11
 
     tests = [
