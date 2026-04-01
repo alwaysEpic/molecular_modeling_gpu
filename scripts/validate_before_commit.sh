@@ -46,28 +46,26 @@ cmake .. -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -3
 make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) 2>&1 | tail -5
 echo ""
 
-# Test 1: CPU 1D first-hit validation
+# Test 1: CPU 1D first-hit validation (KS test)
 echo "=== Test 1: CPU 1D First-Hit with Drift (1k paths) ==="
 ./mc_sim_cpu -i 1000 -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
 RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_h.csv \
-    --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^(PASS|FAIL)")
+    --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^PASS|^FAIL")
 if echo "$RESULT" | grep -q "^PASS"; then
-    report "PASS" "1D first-hit validation (CPU, 1k paths)"
+    report "PASS" "1D first-hit validation (CPU, KS test, 1k paths)"
 else
-    report "FAIL" "1D first-hit validation (CPU, 1k paths)"
+    report "FAIL" "1D first-hit validation (CPU, KS test, 1k paths)"
 fi
 
-# Test 2: CPU 3D spherical receiver validation (no drift)
+# Test 2: CPU 3D spherical receiver validation (KS + binomial)
 echo "=== Test 2: CPU 3D Spherical Receiver (1k paths, no drift) ==="
 ./mc_sim_cpu -i 1000 -f -n > /dev/null 2>&1
 RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_3d_diffusion.py" output_h.csv \
-    --no-plot --total-paths 1000 2>&1 | grep -E "^(PASS|MARGINAL|FAIL)")
+    --no-plot --total-paths 1000 2>&1 | grep -E "^PASS|^FAIL")
 if echo "$RESULT" | grep -q "^PASS"; then
-    report "PASS" "3D diffusion-only validation (CPU, 1k paths)"
-elif echo "$RESULT" | grep -q "^MARGINAL"; then
-    report "PASS" "3D diffusion-only validation (CPU, 1k paths, marginal — normal for low sample count)"
+    report "PASS" "3D diffusion-only validation (CPU, KS + binomial, 1k paths)"
 else
-    report "FAIL" "3D diffusion-only validation (CPU, 1k paths)"
+    report "FAIL" "3D diffusion-only validation (CPU, KS + binomial, 1k paths)"
 fi
 
 # Test 3: CPU RNG quality
@@ -138,11 +136,11 @@ if [ -f "$BUILD_DIR/mc_sim" ]; then
     echo "=== Test 5: GPU 1D First-Hit Validation (1k paths) ==="
     ./mc_sim -i 1000 -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
     RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_d_wide.csv \
-        --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^(PASS|FAIL)")
+        --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^PASS|^FAIL")
     if echo "$RESULT" | grep -q "^PASS"; then
-        report "PASS" "1D first-hit validation (GPU, 1k paths)"
+        report "PASS" "1D first-hit validation (GPU, KS test, 1k paths)"
     else
-        report "FAIL" "1D first-hit validation (GPU, 1k paths)"
+        report "FAIL" "1D first-hit validation (GPU, KS test, 1k paths)"
     fi
 
     echo "=== Test 6: CPU vs GPU Agreement (1k paths) ==="

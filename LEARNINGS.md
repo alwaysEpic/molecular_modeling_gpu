@@ -35,6 +35,43 @@ The thesis breakthrough was two things working together:
 
 Trade-off: `clock64()` can produce correlated streams when threads launch at the same clock tick, but thesis validation (cross-correlation vs MATLAB randn) confirmed acceptable quality for the physics. When `--seed` is provided, we use the fixed seed instead of `clock64()` for reproducibility — same performance, deterministic output.
 
+## Validation Methodology (2026-04-01)
+
+### KS test over NRMSE for simulation validation
+NRMSE on histograms is bin-dependent (change binning, change result), has no known null distribution, and is not a formal statistical test. The Kolmogorov-Smirnov test compares empirical CDF against theoretical CDF with no binning, provides a rigorous p-value, and is consistent. NRMSE kept as supplementary human-readable metric. References: NIST Handbook, Law (2015), Devroye (1986).
+
+### 3D hit-time validation requires two separate tests
+The 3D H_Diff PDF integrates to Pr(hit) = a/d < 1, not to 1. Observed hitting times are samples from the *conditional* distribution (given that the particle hit). KS test must compare against H_Diff normalized to integrate to 1, not the raw PDF. Hit probability validated separately with a binomial test. This is standard practice: Noel et al. (2014), Yilmaz et al. (2014).
+
+### alpha = 0.001 for CI, not 0.05
+At alpha = 0.05, ~5% of CI runs false-fail even with correct code. At alpha = 0.001, false positive rate is 0.1%. With n=10,000 the KS test still detects CDF shifts of ~0.019, catching any real bug.
+
+### 1D inverse Gaussian has exact scipy parameterization
+No numerical integration needed. `scipy.stats.invgauss` with `mu = 2*D/(b*v)`, `scale = b^2/(2*D)` gives exact CDF. Derivation: our PDF `p(t) = b/sqrt(4*pi*D*t^3) * exp(-(v*t-b)^2/(4*D*t))` is a standard inverse Gaussian with mean `mu = b/v` and shape `lambda = b^2/(2*D)`. scipy's parameterization absorbs lambda into scale.
+
+### 3D conditional CDF via numerical integration
+The 3D H_Diff PDF integrates to Pr(hit) < 1, but our samples are only from particles that hit. We must compare against H_Diff normalized to 1 (conditional distribution). CDF built by `cumulative_trapezoid` on a 500k-point grid, then normalized. `interp1d` creates a callable CDF for `scipy.stats.kstest`. This is standard: see Noel et al. (2014), Jamali et al. (2019).
+
+### Thesis equation 4.3 has a typesetting error
+The PDF shows `-(vt - b^2)` but should be `-(v*t - b)^2`. All code (MATLAB and Python) implements the correct form. The squared term applies to the full expression `(v*t - b)`, not just `b`. Verified against Kadloor et al. 2012 Eq. 12.
+
+### Per-call Philox RNG with clock64() is 4-5x faster than persistent state
+See detailed entry under Bugs Found.
+
+## Remaining Validation Improvements
+
+Items identified during deep review, to be addressed:
+1. ~~KS test as formal pass/fail~~ (done — 1D uses scipy.stats.invgauss, 3D uses numerical CDF + binomial hit rate test)
+2. CSV NaN filtering — scripts don't skip headers, MATLAB skips 2 rows
+3. np.trapezoid compatibility — crashes on NumPy < 2.0
+4. Dead QQ plot code in validate_rng.py
+5. 3D test at 1k paths — only ~200 hits across 120 bins is meaningless
+6. Wall reflection validation — TobyThesisTest_walls.m not ported
+7. Multi-parameter 1D test — TobyThesisTest_dist.m uses different params
+8. Timestep convergence test — no test validates dt sensitivity
+9. Inter-stream RNG correlation — test cross-thread correlation
+10. Edge cases: empty CSV, single hit, degenerate histograms
+
 ## Performance
 
 - **Device-side hit detection was the biggest win** — moving hit checks into the kernel and eliminating per-timestep cudaMemcpy gave 25-224x GPU speedup.
