@@ -24,6 +24,9 @@ __pycache__/
 # Validation output
 *.png
 
+# Colab output notebooks
+ipynb_files/
+
 # IDE
 .vscode/
 .idea/
