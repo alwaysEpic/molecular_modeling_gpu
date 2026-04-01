@@ -2,6 +2,7 @@
 #define SIMULATION_GPU_H
 
 #include <stdio.h>
+
 #include "common/params.h"
 
 // Run GPU simulation. Returns elapsed time in seconds.

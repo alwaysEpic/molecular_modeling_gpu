@@ -2,6 +2,7 @@
 #define SIMULATION_CPU_H
 
 #include <stdio.h>
+
 #include "common/params.h"
 
 // Run CPU reference simulation. Returns elapsed time in seconds.

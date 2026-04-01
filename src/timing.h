@@ -1,6 +1,6 @@
 /*
  *  timing.h
- *  
+ *
  *
  *
  */
@@ -27,4 +27,3 @@ double currentTime();
 #endif
 
 #endif
-

@@ -1,28 +1,28 @@
 #ifndef CLI_H
 #define CLI_H
 
+#include <cmath>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <getopt.h>
+
 #include "params.h"
 
-static const struct option cli_options[] = {
-  { "all-hit", no_argument, NULL, 'a' },
-  { "blocksize", required_argument, NULL, 'b' },
-  { "cpu-compare", no_argument, NULL, 'c' },
-  { "deltat", required_argument, NULL, 's' },
-  { "everything", no_argument, NULL, 'e' },
-  { "first-hit", no_argument, NULL, 'f' },
-  { "help", no_argument, NULL, 'h' },
-  { "iterations", required_argument, NULL, 'i' },
-  { "limit", no_argument, NULL, 'l' },
-  { "nodrift", no_argument, NULL, 'n' },
-  { "radius", required_argument, NULL, 'r' },
-  { "time", required_argument, NULL, 't' },
-  { "verbose", no_argument, NULL, 'v' },
-  { "walls", no_argument, NULL, 'w' },
-  { 0, 0, 0, 0 }
-};
+static const struct option cli_options[] = {{"all-hit", no_argument, nullptr, 'a'},
+                                            {"blocksize", required_argument, nullptr, 'b'},
+                                            {"cpu-compare", no_argument, nullptr, 'c'},
+                                            {"deltat", required_argument, nullptr, 's'},
+                                            {"everything", no_argument, nullptr, 'e'},
+                                            {"first-hit", no_argument, nullptr, 'f'},
+                                            {"help", no_argument, nullptr, 'h'},
+                                            {"iterations", required_argument, nullptr, 'i'},
+                                            {"limit", no_argument, nullptr, 'l'},
+                                            {"nodrift", no_argument, nullptr, 'n'},
+                                            {"radius", required_argument, nullptr, 'r'},
+                                            {"time", required_argument, nullptr, 't'},
+                                            {"verbose", no_argument, nullptr, 'v'},
+                                            {"walls", no_argument, nullptr, 'w'},
+                                            {nullptr, 0, nullptr, 0}};
 
 static inline void displayUsage(const char* program_name) {
   printf("Particle Simulation — Version 0.1\n");
@@ -48,7 +48,7 @@ static inline void displayUsage(const char* program_name) {
   exit(1);
 }
 
-static inline void inputError(const char in[20]){
+static inline void inputError(const char in[20]) {
   printf("%s input cannot be negative or zero!\n", in);
   exit(-1);
 }
@@ -60,33 +60,68 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
 
   while ((opt = getopt_long(argc, argv, "ab:cs:efhi:l:nr:t:vw", cli_options, &longindex)) != -1) {
     switch (opt) {
-      case 'a': p.allhit = 1; break;
-      case 'c': p.compare = 1; break;
-      case 'e': p.everything = 1; break;
-      case 'f': p.firsthit = 1; break;
-      case 'h': displayUsage(argv[0]); break;
-      case 'n': p.velocity = 0.0; break;
-      case 'v': p.verbose = 1; break;
-      case 'w': p.walls = 1; break;
-      case 'b': p.blockSize = atoi(optarg);
-          if(p.blockSize <= 0){inputError("Blocksize");}
-          break;
-      case 's': p.deltaT = atof(optarg);
-          if(p.deltaT <= 0){inputError("DeltaT");}
-          break;
-      case 'i': p.iter = atoi(optarg);
-          if(p.iter <= 0){inputError("Iterations");}
-          break;
-      case 'l': p.limit = atof(optarg);
-          if(p.limit < 0){inputError("Limit");}
-          break;
-      case 'r': p.radius = atof(optarg);
-          if(p.radius < 0){inputError("Radius");}
-          break;
-      case 't': p.time_in = atof(optarg);
-          if(p.time_in <= 0){inputError("Time");}
-          break;
-      default: displayUsage(argv[0]);
+      case 'a':
+        p.allhit = 1;
+        break;
+      case 'c':
+        p.compare = 1;
+        break;
+      case 'e':
+        p.everything = 1;
+        break;
+      case 'f':
+        p.firsthit = 1;
+        break;
+      case 'h':
+        displayUsage(argv[0]);
+        break;
+      case 'n':
+        p.velocity = 0.0;
+        break;
+      case 'v':
+        p.verbose = 1;
+        break;
+      case 'w':
+        p.walls = 1;
+        break;
+      case 'b':
+        p.blockSize = atoi(optarg);
+        if (p.blockSize <= 0) {
+          inputError("Blocksize");
+        }
+        break;
+      case 's':
+        p.deltaT = atof(optarg);
+        if (p.deltaT <= 0) {
+          inputError("DeltaT");
+        }
+        break;
+      case 'i':
+        p.iter = atoi(optarg);
+        if (p.iter <= 0) {
+          inputError("Iterations");
+        }
+        break;
+      case 'l':
+        p.limit = atof(optarg);
+        if (p.limit < 0) {
+          inputError("Limit");
+        }
+        break;
+      case 'r':
+        p.radius = atof(optarg);
+        if (p.radius < 0) {
+          inputError("Radius");
+        }
+        break;
+      case 't':
+        p.time_in = atof(optarg);
+        if (p.time_in <= 0) {
+          inputError("Time");
+        }
+        break;
+      default:
+        displayUsage(argv[0]);
     }
   }
 
@@ -94,7 +129,7 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
 }
 
 static inline void printVerbose(const SimParams& p) {
-  int numSteps = (int)(p.time_in/p.deltaT + 0.5f);
+  int numSteps = lround(p.time_in / p.deltaT);
   int gridSize = (p.iter + p.blockSize - 1) / p.blockSize;
   printf("Blocksize: %d\nGridsize: %d\n", p.blockSize, gridSize);
   printf("Db: %0.15f\n", p.Db);
