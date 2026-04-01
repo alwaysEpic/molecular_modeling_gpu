@@ -10,6 +10,7 @@
 #include "common/params.h"
 #include "simulation_gpu.h"
 
+// Shared device function — used by both d_update and d_simulate_isolated
 __device__ void d_reflection(float x1, float y1, float x0, float y0, float* x_new, float* y_new, float radius) {
   float x_diff = x1 - x0;
   float y_diff = y1 - y0;
@@ -31,11 +32,14 @@ __device__ void d_reflection(float x1, float y1, float x0, float y0, float* x_ne
   float A_rho = cos_phi * overshoot_x + sin_phi * overshoot_y;
   float A_phi = -sin_phi * overshoot_x + cos_phi * overshoot_y;
 
-  // Reflect: negate radial component, keep tangential
   *x_new = x_t + cos_phi * (-A_rho) - sin_phi * A_phi;
   *y_new = y_t + sin_phi * (-A_rho) + cos_phi * A_phi;
 }
 
+// ---------------------------------------------------------------------------
+// Per-step kernel — kept for future collision mode and everything/allhit paths.
+// Positions live in global memory (d_x, d_y, d_z), accessible between steps.
+// ---------------------------------------------------------------------------
 __global__ void d_update(long long rng_seed, float diffStep, float driftStep, int iter, float* d_x, float* d_y,
                          float* d_z, int walls, float radius, int start_flag, int t_step, int* d_hit_flag,
                          int* d_hit_step, float* d_hit_x, float* d_hit_y, float* d_hit_z, float limit, float rec_rad,
@@ -44,18 +48,12 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= iter) return;
 
-  // Skip particles that already recorded a first-hit
   if (firsthit && d_hit_flag[idx]) return;
 
-  // Per-call RNG: Philox on stack (registers), seeded by clock64() or fixed seed
-  // This is 4-5x faster than persistent global memory state — see LEARNINGS.md
   curandStatePhilox4_32_10_t state;
   curand_init(rng_seed, idx, 0, &state);
 
-  // Generate 4 normals at once (Philox natively produces 4x32-bit values,
-  // curand_normal4 exploits this — ~30% faster than 3 separate calls)
   float4 rn = curand_normal4(&state);
-
   float x_next = diffStep * rn.x;
   float y_next = diffStep * rn.y;
   float z_next = diffStep * rn.z + driftStep;
@@ -85,18 +83,13 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
     if (sqrtf(d_x[idx] * d_x[idx] + d_y[idx] * d_y[idx]) > radius) {
       float refl_x, refl_y;
       d_reflection(x_last + x_next, y_last + y_next, x_last, y_last, &refl_x, &refl_y, radius);
-
-      // refl_x/y are absolute world-space positions (built from wall intersection
-      // point + reflected overshoot). Do NOT add x_last — it's already baked in.
       d_x[idx] = refl_x;
       d_y[idx] = refl_y;
     }
   }
 
-  // Hit detection (device-side)
   if (d_hit_flag[idx]) return;
 
-  // 1D Limit test
   if (limit > 0 && d_z[idx] > limit) {
     d_hit_flag[idx] = 1;
     d_hit_step[idx] = t_step;
@@ -106,7 +99,6 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
     return;
   }
 
-  // Spherical receiver test
   if (limit == 0) {
     float dx = d_x[idx] - locx;
     float dy = d_y[idx] - locy;
@@ -121,21 +113,86 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
   }
 }
 
+// ---------------------------------------------------------------------------
+// Persistent kernel — all timesteps in one launch, positions in registers.
+// For isolated particles only (first-hit/limit mode, no everything/allhit).
+// No global position arrays needed. RNG initialized once per particle.
+// ---------------------------------------------------------------------------
+__global__ void d_simulate_isolated(long long rng_seed, float diffStep, float driftStep, int iter, int numSteps,
+                                    int walls, float radius, float limit, float rec_rad, float locx, float locy,
+                                    float locz, int firsthit, float start_x, float start_y, float start_z,
+                                    int* d_hit_flag, int* d_hit_step, float* d_hit_x, float* d_hit_y, float* d_hit_z) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx >= iter) return;
+
+  // RNG: init once, state lives in registers across all timesteps
+  curandStatePhilox4_32_10_t state;
+  curand_init(rng_seed, idx, 0, &state);
+
+  // Positions in registers — no global memory for particle positions
+  float px = start_x, py = start_y, pz = start_z;
+  int hit = 0;
+
+  for (int t = 0; t < numSteps; t++) {
+    if (firsthit && hit) break;
+
+    float4 rn = curand_normal4(&state);
+    float x_next = diffStep * rn.x;
+    float y_next = diffStep * rn.y;
+    float z_next = diffStep * rn.z + driftStep;
+
+    float x_last = px, y_last = py;
+    px += x_next;
+    py += y_next;
+    pz += z_next;
+
+    // Wall reflection
+    if (walls && sqrtf(px * px + py * py) > radius) {
+      float refl_x, refl_y;
+      d_reflection(x_last + x_next, y_last + y_next, x_last, y_last, &refl_x, &refl_y, radius);
+      px = refl_x;
+      py = refl_y;
+    }
+
+    // Hit detection — write to global memory only on hit
+    if (!hit) {
+      if (limit > 0 && pz > limit) {
+        d_hit_flag[idx] = 1;
+        d_hit_step[idx] = t;
+        d_hit_x[idx] = px;
+        d_hit_y[idx] = py;
+        d_hit_z[idx] = pz;
+        hit = 1;
+      } else if (limit == 0) {
+        float dx = px - locx, dy = py - locy, dz = pz - locz;
+        if (rec_rad > sqrtf(dx * dx + dy * dy + dz * dz)) {
+          d_hit_flag[idx] = 1;
+          d_hit_step[idx] = t;
+          d_hit_x[idx] = px;
+          d_hit_y[idx] = py;
+          d_hit_z[idx] = pz;
+          hit = 1;
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Host entry point — dispatches to persistent or per-step kernel
+// ---------------------------------------------------------------------------
 float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   int numSteps = lround(p.time_in / p.deltaT);
   int gridSize = (p.iter + p.blockSize - 1) / p.blockSize;
 
-  // Precompute constants (same for every thread every timestep)
+  // Precompute constants
   float diffStep = sqrtf(2.0f * p.Db * p.deltaT);
   float driftStep = p.velocity * p.deltaT;
 
-  // Device position arrays
-  float *d_x, *d_y, *d_z;
-  cudaMalloc(&d_x, p.iter * sizeof(float));
-  cudaMalloc(&d_y, p.iter * sizeof(float));
-  cudaMalloc(&d_z, p.iter * sizeof(float));
+  // Use persistent kernel for isolated first-hit/limit modes
+  int use_persistent = (p.firsthit == 1 || p.limit > 0) && p.everything == 0 && p.allhit == 0;
 
-  // Device hit detection arrays
+  // Device hit detection arrays (needed by both paths)
   int *d_hit_flag, *d_hit_step;
   float *d_hit_x, *d_hit_y, *d_hit_z;
   cudaMalloc(&d_hit_flag, p.iter * sizeof(int));
@@ -146,21 +203,6 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   cudaMemset(d_hit_flag, 0, p.iter * sizeof(int));
   cudaMemset(d_hit_step, 0, p.iter * sizeof(int));
 
-  // Use optimized path for first-hit and limit modes (no per-step memcpy)
-  int use_optimized = (p.firsthit == 1 || p.limit > 0) && p.everything == 0 && p.allhit == 0;
-
-  // Fallback: host arrays for per-step copy (everything/allhit modes only)
-  float *x = nullptr, *y = nullptr, *z = nullptr;
-  std::vector<int> last_GPU;
-  if (!use_optimized) {
-    x = (float*)malloc(p.iter * sizeof(float));
-    y = (float*)malloc(p.iter * sizeof(float));
-    z = (float*)malloc(p.iter * sizeof(float));
-    last_GPU.resize(p.iter, 0);
-  }
-
-  int start_flag = 0;
-
   // Timing
   cudaEvent_t start, stop;
   float pcost = 0;
@@ -168,25 +210,51 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   cudaEventCreate(&stop);
   cudaEventRecord(start);
 
-  for (int t_count = 0; t_count < numSteps; t_count++) {
-    // RNG seed: fixed seed or clock64() for each kernel call
-    long long rng_seed = (p.seed != 0) ? p.seed + t_count : clock();
+  if (use_persistent) {
+    // ---------- Persistent kernel path ----------
+    // Single launch, all timesteps inside kernel, positions in registers.
+    // No d_x/d_y/d_z arrays needed.
+    long long rng_seed = (p.seed != 0) ? p.seed : (long long)clock();
 
-    d_update<<<gridSize, p.blockSize>>>(rng_seed, diffStep, driftStep, p.iter, d_x, d_y, d_z, p.walls, p.radius,
-                                        start_flag, t_count, d_hit_flag, d_hit_step, d_hit_x, d_hit_y, d_hit_z,
-                                        p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit, p.start_x,
-                                        p.start_y, p.start_z);
+    d_simulate_isolated<<<gridSize, p.blockSize>>>(rng_seed, diffStep, driftStep, p.iter, numSteps, p.walls, p.radius,
+                                                    p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit, p.start_x,
+                                                    p.start_y, p.start_z, d_hit_flag, d_hit_step, d_hit_x, d_hit_y,
+                                                    d_hit_z);
 
     cudaError_t code = cudaGetLastError();
     if (code != cudaSuccess && p.verbose == 1)
       printf("Cuda error kernel -- %s\n", cudaGetErrorString(code));
 
-    if (start_flag == 0) {
-      start_flag = 1;
-    }
+  } else {
+    // ---------- Per-step kernel path ----------
+    // For everything/allhit modes and future collision mode.
+    // Positions in global memory, accessible between steps.
+    float *d_x, *d_y, *d_z;
+    cudaMalloc(&d_x, p.iter * sizeof(float));
+    cudaMalloc(&d_y, p.iter * sizeof(float));
+    cudaMalloc(&d_z, p.iter * sizeof(float));
 
-    // Fallback path: per-step memcpy for everything/allhit modes
-    if (!use_optimized) {
+    float *x = (float*)malloc(p.iter * sizeof(float));
+    float *y = (float*)malloc(p.iter * sizeof(float));
+    float *z = (float*)malloc(p.iter * sizeof(float));
+    std::vector<int> last_GPU(p.iter, 0);
+
+    int start_flag = 0;
+
+    for (int t_count = 0; t_count < numSteps; t_count++) {
+      long long rng_seed = (p.seed != 0) ? p.seed + t_count : clock();
+
+      d_update<<<gridSize, p.blockSize>>>(rng_seed, diffStep, driftStep, p.iter, d_x, d_y, d_z, p.walls, p.radius,
+                                          start_flag, t_count, d_hit_flag, d_hit_step, d_hit_x, d_hit_y, d_hit_z,
+                                          p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit, p.start_x,
+                                          p.start_y, p.start_z);
+
+      cudaError_t code = cudaGetLastError();
+      if (code != cudaSuccess && p.verbose == 1)
+        printf("Cuda error kernel -- %s\n", cudaGetErrorString(code));
+
+      if (start_flag == 0) start_flag = 1;
+
       cudaMemcpy(x, d_x, p.iter * sizeof(float), cudaMemcpyDeviceToHost);
       cudaMemcpy(y, d_y, p.iter * sizeof(float), cudaMemcpyDeviceToHost);
       cudaMemcpy(z, d_z, p.iter * sizeof(float), cudaMemcpyDeviceToHost);
@@ -209,14 +277,21 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
       }
       fprintf(fp_out, "\n");
     }
+
+    free(x);
+    free(y);
+    free(z);
+    cudaFree(d_x);
+    cudaFree(d_y);
+    cudaFree(d_z);
   }
 
   cudaEventRecord(stop);
   cudaEventSynchronize(stop);
   cudaEventElapsedTime(&pcost, start, stop);
 
-  // Optimized path: single copy of hit results, write CSV
-  if (use_optimized) {
+  // Both paths: copy hit results and write CSV
+  if (use_persistent) {
     int* hit_flag = (int*)malloc(p.iter * sizeof(int));
     int* hit_step = (int*)malloc(p.iter * sizeof(int));
     float* hit_x = (float*)malloc(p.iter * sizeof(float));
@@ -242,15 +317,6 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
     free(hit_z);
   }
 
-  // Cleanup
-  if (!use_optimized) {
-    free(x);
-    free(y);
-    free(z);
-  }
-  cudaFree(d_x);
-  cudaFree(d_y);
-  cudaFree(d_z);
   cudaFree(d_hit_flag);
   cudaFree(d_hit_step);
   cudaFree(d_hit_x);
