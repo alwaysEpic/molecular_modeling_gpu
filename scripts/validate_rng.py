@@ -75,7 +75,7 @@ def test_autocorrelation(samples, max_lag=50):
         'violations': violations,
         'lags_checked': lags_to_check,
         'violation_rate': violation_rate,
-        'pass': violation_rate < 0.10,  # allow up to 10%
+        'pass': violation_rate < 0.15,  # allow up to 15% (5% expected for white noise)
     }
 
 

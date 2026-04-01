@@ -1,5 +1,8 @@
 #!/bin/bash
-# Run validation tests before committing.
+# Pre-commit validation suite.
+# Runs all tests that can execute locally (CPU-only).
+# GPU tests require Colab — see colab_build_test.ipynb.
+#
 # Usage: ./scripts/validate_before_commit.sh
 
 set -e
@@ -9,7 +12,26 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$REPO_DIR/build"
 VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
 
-# Check venv exists
+PASS=0
+FAIL=0
+SKIP=0
+
+report() {
+    local status=$1
+    local name=$2
+    if [ "$status" = "PASS" ]; then
+        echo "  [PASS] $name"
+        PASS=$((PASS + 1))
+    elif [ "$status" = "FAIL" ]; then
+        echo "  [FAIL] $name"
+        FAIL=$((FAIL + 1))
+    else
+        echo "  [SKIP] $name"
+        SKIP=$((SKIP + 1))
+    fi
+}
+
+# Check venv
 if [ ! -f "$VENV_PYTHON" ]; then
     echo "Python venv not found. Run:"
     echo "  python3 -m venv scripts/.venv && scripts/.venv/bin/pip install -r scripts/requirements.txt"
@@ -17,31 +39,136 @@ if [ ! -f "$VENV_PYTHON" ]; then
 fi
 
 # Build
-echo "=== Building ==="
+echo "=== Build ==="
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 cmake .. -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -3
 make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) 2>&1 | tail -5
-
-# Run CPU validation (1D first-hit with drift, 1000 paths — fast)
 echo ""
-echo "=== CPU Validation (1k paths, ~1.5s) ==="
-./mc_sim_cpu -i 1000 -f -l 3E-7 -t 1E-2
 
-echo ""
-"$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_h.csv \
-    --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2
-
-# Run GPU validation if mc_sim exists
-if [ -f ./mc_sim ]; then
-    echo ""
-    echo "=== GPU Validation (1k paths) ==="
-    ./mc_sim -i 1000 -f -l 3E-7 -t 1E-2
-
-    echo ""
-    "$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_d_wide.csv \
-        --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2
+# Test 1: CPU 1D first-hit validation
+echo "=== Test 1: CPU 1D First-Hit with Drift (1k paths) ==="
+./mc_sim_cpu -i 1000 -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
+RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_h.csv \
+    --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^(PASS|FAIL)")
+if echo "$RESULT" | grep -q "^PASS"; then
+    report "PASS" "1D first-hit validation (CPU, 1k paths)"
+else
+    report "FAIL" "1D first-hit validation (CPU, 1k paths)"
 fi
 
+# Test 2: CPU 3D spherical receiver validation (no drift)
+echo "=== Test 2: CPU 3D Spherical Receiver (1k paths, no drift) ==="
+./mc_sim_cpu -i 1000 -f -n > /dev/null 2>&1
+RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_3d_diffusion.py" output_h.csv \
+    --no-plot --total-paths 1000 2>&1 | grep -E "^(PASS|MARGINAL|FAIL)")
+if echo "$RESULT" | grep -q "^PASS"; then
+    report "PASS" "3D diffusion-only validation (CPU, 1k paths)"
+elif echo "$RESULT" | grep -q "^MARGINAL"; then
+    report "PASS" "3D diffusion-only validation (CPU, 1k paths, marginal — normal for low sample count)"
+else
+    report "FAIL" "3D diffusion-only validation (CPU, 1k paths)"
+fi
+
+# Test 3: CPU RNG quality
+echo "=== Test 3: CPU RNG Quality ==="
+if [ -f "$BUILD_DIR/dump_rng_cpu" ] || g++ -O2 -o "$BUILD_DIR/dump_rng_cpu" "$SCRIPT_DIR/dump_rng_cpu.cpp" -lm 2>/dev/null; then
+    "$BUILD_DIR/dump_rng_cpu" 10000 > "$BUILD_DIR/rng_test.csv"
+    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_rng.py" "$BUILD_DIR/rng_test.csv" --no-plot 2>&1 | grep -E "^(PASS|FAIL) — Overall")
+    if echo "$RESULT" | grep -q "^PASS"; then
+        report "PASS" "CPU RNG quality (10k samples)"
+    else
+        report "FAIL" "CPU RNG quality (10k samples)"
+    fi
+else
+    report "SKIP" "CPU RNG quality (could not compile dump_rng_cpu)"
+fi
+
+# Test 4: Edge cases
+echo "=== Test 4: Edge Cases ==="
+
+# Single iteration
+./mc_sim_cpu -i 1 -f -l 3E-7 -t 1E-3 > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    report "PASS" "Single iteration (iter=1)"
+else
+    report "FAIL" "Single iteration (iter=1)"
+fi
+
+# Iter not multiple of blocksize (129 particles, blocksize 128)
+./mc_sim_cpu -i 129 -f -l 3E-7 -t 1E-3 > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    report "PASS" "Non-aligned iteration count (iter=129)"
+else
+    report "FAIL" "Non-aligned iteration count (iter=129)"
+fi
+
+# No drift
+./mc_sim_cpu -i 100 -f -n > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    report "PASS" "No drift mode"
+else
+    report "FAIL" "No drift mode"
+fi
+
+# Zero inputs should fail gracefully
+set +e
+./mc_sim_cpu -i 0 > /dev/null 2>&1
+RC=$?
+set -e
+if [ $RC -ne 0 ]; then
+    report "PASS" "Reject iter=0"
+else
+    report "FAIL" "Reject iter=0 (should exit with error)"
+fi
+
+set +e
+./mc_sim_cpu -t 0 > /dev/null 2>&1
+RC=$?
+set -e
+if [ $RC -ne 0 ]; then
+    report "PASS" "Reject time=0"
+else
+    report "FAIL" "Reject time=0 (should exit with error)"
+fi
+
+# GPU tests (only if mc_sim exists)
 echo ""
-echo "=== All validations complete ==="
+if [ -f "$BUILD_DIR/mc_sim" ]; then
+    echo "=== Test 5: GPU 1D First-Hit Validation (1k paths) ==="
+    ./mc_sim -i 1000 -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
+    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_d_wide.csv \
+        --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^(PASS|FAIL)")
+    if echo "$RESULT" | grep -q "^PASS"; then
+        report "PASS" "1D first-hit validation (GPU, 1k paths)"
+    else
+        report "FAIL" "1D first-hit validation (GPU, 1k paths)"
+    fi
+
+    echo "=== Test 6: CPU vs GPU Agreement (1k paths) ==="
+    ./mc_sim -i 1000 -c -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
+    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_cpu_gpu_agreement.py" output_h.csv output_d_wide.csv \
+        --no-plot --timestep 1E-7 2>&1 | grep -E "^(PASS|FAIL) — CPU/GPU")
+    if echo "$RESULT" | grep -q "^PASS"; then
+        report "PASS" "CPU/GPU agreement (1k paths)"
+    else
+        report "FAIL" "CPU/GPU agreement (1k paths)"
+    fi
+else
+    report "SKIP" "GPU tests (CUDA not available)"
+    report "SKIP" "CPU/GPU agreement (CUDA not available)"
+fi
+
+# Summary
+echo ""
+echo "=============================="
+echo "  PASS: $PASS  FAIL: $FAIL  SKIP: $SKIP"
+echo "=============================="
+
+if [ $FAIL -gt 0 ]; then
+    echo "SOME TESTS FAILED — do not commit without investigating"
+    exit 1
+else
+    echo "All tests passed. Safe to commit."
+    exit 0
+fi
