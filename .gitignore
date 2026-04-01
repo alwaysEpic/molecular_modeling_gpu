@@ -1,0 +1,21 @@
+# Build artifacts
+*.o
+*.obj
+*.exe
+build/
+
+# CUDA compiled
+*.cubin
+*.ptx
+*.fatbin
+
+# Output data
+*.csv
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
