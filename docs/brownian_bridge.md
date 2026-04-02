@@ -156,21 +156,30 @@ This avoids any extra RNG calls. erff() maps to a hardware instruction
 (MUFU) on CUDA, so it is essentially free. expf() for the crossing
 probability also maps to hardware (MUFU.EX2).
 
-### Crossing Time Estimation
+### Crossing Time Estimation (not yet implemented)
 
-When a bridge crossing is detected, we need a crossing time for the
-first-passage record. Options (increasing accuracy/cost):
+Hit times are currently recorded as integer timestep indices. Sub-step
+crossing times would produce continuous-valued hit times, eliminating
+the lattice effect detectable by KS tests at large n.
 
-1. **Midpoint**: t_cross = t_n + dt/2. Crude, O(dt) accurate.
-2. **Linear interpolation**: t_cross = t_n + dt * d_n/(d_n + d_n+1).
-   Better for explicit crossings.
-3. **Inverse Gaussian sample**: exact conditional distribution of first
-   crossing time for the bridge. Most accurate but expensive (rejection
-   sampling needed).
+The crossing time tau/dt within a timestep is approximately
+Beta(alpha, beta) distributed:
 
-Recommendation: use midpoint for now (simplest, sufficient for histogram
-validation). The O(dt) error in crossing time is same order as the
-remaining discretization error after bridge correction.
+- Explicit crossings (a < c < b):
+  alpha = (c-a)^2 / (D*dt), beta = (b-c)^2 / (D*dt)
+- Bridge-detected crossings (a < c, b < c):
+  alpha = (c-a)^2 / (2*D*dt), beta = (c-b)^2 / (2*D*dt)
+
+Sampling uses the normal approximation to Beta inverse CDF:
+  s = mu + sigma * erfinvf(2*u - 1) * sqrt(2)
+where mu = alpha/(alpha+beta), sigma = sqrt(alpha*beta/((alpha+beta)^2*(alpha+beta+1))).
+
+This was prototyped and produces correct continuous times, but does NOT
+resolve the 1D KS test failure. Investigation found that the simulation
+has a pre-existing ~7% bias in mean first-passage time (2.79ms vs
+theoretical 3.00ms for b=3E-7, v=1E-4) that exists with or without
+bridge correction and does not scale with dt. This requires separate
+investigation before sub-step timing adds value.
 
 ## Error Analysis
 
@@ -200,31 +209,32 @@ For our parameters, the receiver (50nm from origin) and wall (8um radius)
 are far apart relative to the diffusion step (~4.5nm), so independent
 treatment is valid.
 
-## Validation Tests
+## Validation Results
 
-### Test 1: 1D KS Test Should Pass at 10k Paths
+### 3D Spherical Receiver — FIXED
 
-Currently fails with KS stat ~0.024, p ~5E-5. After bridge correction,
-the simulation should match the continuous-time inverse Gaussian, and
-this test should PASS.
+Bridge correction eliminates the hit rate bias:
+- Before: 14.0% hit rate, binomial FAIL (p=0.00002)
+- After: 15.3% hit rate, binomial PASS (p=0.49)
+- KS test: PASS (p=0.16)
 
-### Test 2: 3D Binomial Hit Rate Should Match Theory
+### 1D Planar Limit — NOT FIXED (pre-existing issue)
 
-Currently ~14% vs theoretical 15.5%. After bridge correction, the
-observed hit rate should converge to the theoretical value within
-binomial sampling variance.
+KS test still fails at 10k paths (KS ~0.024, p ~5E-5). Investigation
+revealed this is a pre-existing ~7% mean bias (2.79ms vs 3.00ms) that:
+- Exists with or without bridge correction
+- Does not scale with dt (halving dt doesn't improve KS)
+- Causes the ECDF to be systematically AHEAD of theory (hits too early)
+- Requires separate investigation (may be a parameterization issue,
+  float precision in the limit comparison, or a fundamental property
+  of the 1D limit detection at this scale)
 
-### Test 3: Convergence Rate Test (new)
+### Future Tests
 
-Run the simulation at dt and dt/2. The difference in hit probability
-should scale as O(dt) with bridge (vs O(sqrt(dt)) without). This
-directly validates that the correction promotes the convergence order.
-
-### Test 4: Bridge Probability Unit Test (new)
-
-Generate known (a, b) pairs with a known boundary c and D*dt. Compute
-P_cross analytically and verify the simulation's bridge acceptance rate
-matches over many samples.
+- Convergence rate test: verify O(dt) scaling with bridge vs O(sqrt(dt))
+  without, using the 3D spherical receiver (where bridge is validated)
+- Bridge probability unit test: verify acceptance rate matches analytical
+  P_cross for known (a, b, c, D, dt) configurations
 
 ## Key References
 
