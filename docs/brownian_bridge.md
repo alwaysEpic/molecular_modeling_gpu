@@ -17,7 +17,7 @@ completely undetected at either endpoint. This causes:
    for our 3D test, ~97.8% vs 100% for 1D with drift
 2. **Bias in first-passage time distribution** — KS test fails at 10k paths
    (p ~5E-5 at alpha=0.001)
-3. **Error scaling as O(sqrt(dt))** — Gobet (2000), Math. Comp. 69:225-259
+3. **Error scaling as O(sqrt(dt))** — Gobet (2000), Stoch. Proc. Appl. 87:167-197
 
 Neither the thesis nor any of its reference papers discuss this issue. All
 analytical formulas (Schulten Eq. 3.108, Kadloor Eq. 12) assume continuous

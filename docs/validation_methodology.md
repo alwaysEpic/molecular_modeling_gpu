@@ -146,7 +146,7 @@ The Euler-Maruyama integrator is exact for our constant-coefficient SDE, but hit
 detection is discrete: a particle can cross through the receiver between timesteps
 without being detected. This introduces a systematic negative bias in hit probability
 and a slight shift in the hit-time distribution, scaling as O(sqrt(dt)) (Gobet 2000,
-Math. Comp. 69:225-259).
+Stoch. Proc. Appl. 87:167-197).
 
 At 10,000 paths with dt=1E-7, the KS test is powerful enough to detect this bias
 (KS stat ~0.024, p ~5E-5 against the continuous analytical solution). This is a
