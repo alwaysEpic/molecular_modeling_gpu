@@ -16,7 +16,7 @@ src/
   main.cu                 # GPU entry point — dispatches to CPU/GPU simulation
   main_cpu.cpp            # CPU-only entry point — no CUDA dependency
   simulation_cpu.cpp/.h   # CPU reference: Brownian motion, hit detection
-  simulation_gpu.cu/.h    # GPU kernels: d_update, d_reflection
+  simulation_gpu.cu/.h    # GPU kernels: d_simulate_isolated (deep), d_update (wide), d_reflection
   timing.c/.h             # Wall-clock timing utility
 scripts/
   validate_1d_firsthit.py # Validates output against analytical solution (thesis eq 4.3)
@@ -71,7 +71,11 @@ scripts/.venv/bin/python scripts/validate_1d_firsthit.py build/output_h.csv \
     --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2
 ```
 
-## Known Issues
-- Data race on shared `x_new`/`y_new` device pointers in wall reflection
-- Per-timestep cudaMemcpy bottleneck limits GPU speedup
-- RNG re-initialized per kernel call (clock64 seed) — correlated streams possible
+## Architecture
+- **Deep kernel** (`d_simulate_isolated`): persistent, all timesteps in one launch,
+  positions in registers. Used for first-hit/limit modes. ~1,400x faster than thesis.
+- **Wide kernel** (`d_update`): per-step launch, positions in global memory. Used for
+  everything/allhit modes and future particle interactions (`-W` flag).
+- Both kernels include Brownian bridge boundary crossing correction.
+- RNG: per-call clock64() seeding with cuRAND Philox — intentional design for
+  performance (4-5x faster than persistent global state).

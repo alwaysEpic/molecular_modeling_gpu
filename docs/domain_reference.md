@@ -418,15 +418,23 @@ minimal correlation (Figures 3.1, 3.2 in thesis).
 
 ### 5.1 Parallelization Strategy
 
-- Each GPU thread handles one particle path for a single time step
-- All N particle positions at time `t_n` are computed in parallel, then `t_{n+1}`,
-  etc. (step-synchronous)
-- This differs from CPU approach where each path is computed to completion
-  sequentially
+Two GPU kernel architectures are implemented:
+
+**Deep kernel (`d_simulate_isolated`):** Each thread computes one particle's
+entire path (all timesteps) in a single kernel launch. Positions live in
+registers. Used for first-hit and limit modes where particles are independent.
+
+**Wide kernel (`d_update`):** Each thread advances one particle by one timestep.
+Positions live in global memory, accessible between kernel launches. Used for
+everything/allhit modes and future particle interactions (via `-W` flag).
+
+Common design:
 - Thread index: `idx = blockIdx.x * blockDim.x + threadIdx.x`
-- Parameters (D_B, velocity, positions) loaded into local registers at kernel
-  start
-- RNG seed is per-thread, maintained across kernel invocations
+- Parameters precomputed on host (`diffStep = sqrt(2*D*dt)`, `driftStep = v*dt`)
+- RNG: cuRAND Philox4_32_10, seeded per-call with clock64() (faster than
+  persistent global state by 4-5x)
+- curand_normal4 generates 4 normals per call (3 for x/y/z, 4th for Brownian
+  bridge)
 
 ### 5.2 Data Storage
 
@@ -440,11 +448,21 @@ minimal correlation (Figures 3.1, 3.2 in thesis).
 
 ### 5.3 Performance Characteristics
 
-- GPU advantage appears at ~5,000+ paths for first-hit recording
+**Original thesis (GTX 1070, per-step kernel only):**
+- GPU advantage appeared at ~5,000+ paths for first-hit recording
 - Peak speedup ~3.44x at 10,000 paths (GTX 1070 vs single-core i7-7700K)
-- Speedup decreases beyond ~1E5 paths due to per-step GPU-to-host memory copy
-  and CSV write overhead
-- Memory transfer is the primary bottleneck, not computation
+- Speedup decreased beyond ~1E5 paths due to per-step GPU-to-host memory copy
+- Memory transfer was the primary bottleneck, not computation
+
+**Current implementation (Tesla T4):**
+- Persistent (deep) kernel: ~1,400x faster than thesis baseline. Eliminates all
+  per-step memory transfers by running all timesteps in a single kernel launch
+  with positions in registers.
+- Wide (per-step) kernel: ~47x faster than thesis baseline at 10k paths (same
+  architecture, but with device-side hit detection, precomputed constants,
+  curand_normal4, and block size 256).
+- The T4 is actually slower than the 1070 for the original thesis code due to
+  higher kernel launch latency — all speedup is from code improvements.
 - Adding drift has negligible impact on computation time (one extra multiply-add)
 
 ---
@@ -453,9 +471,10 @@ minimal correlation (Figures 3.1, 3.2 in thesis).
 
 ### 6.1 From the Thesis
 
-1. **Memory transfer bottleneck:** The GPU kernel is called from a CPU loop for
-   each time step, requiring GPU-to-host memory copies. Computing entire paths
-   on-GPU without intermediate copies would improve performance.
+1. **Memory transfer bottleneck (resolved):** The original GPU kernel was called
+   from a CPU loop for each time step. The persistent kernel now computes entire
+   paths on-GPU without intermediate copies (~1,400x speedup). The wide kernel
+   still launches per-step but uses device-side hit detection (~47x speedup).
 
 2. **Red blood cell (RBC) interactions:** RBCs are not modeled. Their tumbling
    motion in the core region creates turbulent flow that pushes smaller particles

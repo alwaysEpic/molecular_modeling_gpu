@@ -19,7 +19,7 @@ Parameters: `-f`, Db=1E-11, deltaT=1E-7, t=1E-3
 | GPU | Change | 1,000 paths | 10,000 paths |
 |-----|--------|------------|-------------|
 | GTX 1070 (thesis) | original | 2.27s | 4.81s |
-| Tesla T4 | thesis-baseline branch | 1.38s | 11.2s |
+| Tesla T4 | original thesis code | 1.38s | 11.2s |
 | Tesla T4 | device-side hit detection | 0.055s | 0.063s |
 | Tesla T4 | + precompute/curand_normal4/block256 | 0.012s | 0.013s |
 | Tesla T4 | **+ persistent kernel** | **0.008s** | **0.008s** |
@@ -38,7 +38,7 @@ Parameters: `-f -l 3E-7 -t 1E-2`, Db=1E-11, vel=1E-4, deltaT=1E-7, 100k steps
 | Processor | Change | 10,000 paths |
 |-----------|--------|-------------|
 | Colab Xeon CPU | current | 126s |
-| Tesla T4 GPU | thesis-baseline | 16.7s |
+| Tesla T4 GPU | original thesis code | 16.7s |
 | Tesla T4 GPU | device-side hit detection | 0.633s |
 | Tesla T4 GPU | **persistent kernel** | **0.065s** |
 
@@ -58,9 +58,9 @@ GPU vs CPU speedup: 126s / 0.065s = **1,938x**
 |------|---------|--------|-------|
 | 1D first-hit KS (1k paths) | GPU | PASS | |
 | 1D first-hit KS (1k paths) | CPU | PASS | |
-| 1D first-hit KS (10k paths) | GPU | FAIL | Boundary-crossing bias (documented) |
+| 1D first-hit KS (10k paths) | GPU | PASS | After Brownian bridge correction |
 | 3D spherical KS (10k paths) | GPU | PASS | |
-| 3D spherical binomial (10k) | GPU | FAIL | Boundary-crossing bias (documented) |
+| 3D spherical binomial (10k) | GPU | PASS | After Brownian bridge correction |
 | 3D spherical (1k paths) | CPU | PASS | |
 | CPU/GPU agreement (5k paths) | Both | PASS | KS p > 0.01 |
 | GPU RNG quality (Philox) | GPU | PASS | |
@@ -79,12 +79,12 @@ GPU vs CPU speedup: 126s / 0.065s = **1,938x**
 | Device-side hit detection | 25-224x — eliminated per-timestep cudaMemcpy |
 | Precompute constants + curand_normal4 + block 256 | ~5x on top of above |
 | **Persistent kernel (d_simulate_isolated)** | **~3x on top of above** |
+| Brownian bridge correction | Correctness (fixes boundary-crossing bias) |
+| Wide kernel (d_update) with same optimizations | Same improvements, global memory positions |
+| CUDA Graphs for wide kernel | Reverted — added overhead, no improvement |
 | **Total vs thesis baseline** | **~1,400x** |
 
 ## Known Limitations
 
-- **Discrete boundary-crossing bias**: KS test fails at 10k+ paths because particles
-  cross through receiver between timesteps. O(sqrt(dt)) error per Gobet (2000).
-  Fix: Brownian bridge correction (see `brownian-bridge` branch).
 - **--use_fast_math disabled**: caused wall reflection test failures due to reduced
   trig precision. Could be re-enabled selectively for non-reflection code paths.

@@ -152,14 +152,16 @@ At 10,000 paths with dt=1E-7, the KS test is powerful enough to detect this bias
 (KS stat ~0.024, p ~5E-5 against the continuous analytical solution). This is a
 real physical limitation of discrete-time simulation, not a code bug.
 
-**Impact:**
-- 1D first-hit KS test may FAIL at n >= 10,000 with alpha=0.001
-- 3D binomial test may FAIL (observed ~14% hit rate vs theoretical ~15.5%)
+**Impact (without correction):**
+- 1D first-hit KS test fails at n >= 10,000 with alpha=0.001
+- 3D binomial test fails (observed ~14% hit rate vs theoretical ~15.5%)
 - Both pass comfortably at n=1,000 (insufficient power to detect the bias)
 
-**Fix:** Implement Brownian bridge correction — at each timestep, compute the
+**Fix (implemented):** Brownian bridge correction — at each timestep, compute the
 probability that the continuous path crossed the boundary between x_n and x_{n+1}
-using P(cross) = exp(-2(b-x_n)(b-x_{n+1})/(2*D*dt)), and sample accordingly.
+using P(cross) = exp(-(c-a)*(c-b) / (D*dt)), and sample accordingly.
 This eliminates the dominant discretization error without reducing dt.
 
-See branch `brownian-bridge` for this work.
+Implemented in both deep and wide GPU kernels and the CPU path. After correction,
+1D KS and 3D binomial tests pass at 10k+ paths. See `docs/brownian_bridge.md`
+for full derivation and references.
