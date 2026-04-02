@@ -34,6 +34,7 @@ struct SimParams {
   int firsthit;
   int allhit;
   int everything;
+  int wide;  // Force wide (per-step) kernel path
 };
 
 static inline SimParams defaultParams() {
@@ -69,6 +70,7 @@ static inline SimParams defaultParams() {
   p.firsthit = 0;
   p.allhit = 0;
   p.everything = 0;
+  p.wide = 0;
 
   return p;
 }

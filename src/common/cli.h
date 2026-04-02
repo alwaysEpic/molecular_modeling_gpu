@@ -49,6 +49,7 @@ static const struct option cli_options[] = {
     // GPU / runtime
     {"blocksize", required_argument, nullptr, 'b'},
     {"cpu-compare", no_argument, nullptr, 'c'},
+    {"wide", no_argument, nullptr, 'W'},
 
     // General
     {"verbose", no_argument, nullptr, 'v'},
@@ -86,8 +87,9 @@ static inline void displayUsage(const char* program_name) {
   printf("      --rec-z Z            Receiver z position in meters [default: 50E-9]\n");
 
   printf("\nGPU / Runtime:\n");
-  printf("  -b, --blocksize N        CUDA block size [default: 128]\n");
+  printf("  -b, --blocksize N        CUDA block size [default: 256]\n");
   printf("  -c, --cpu-compare        Run CPU reference alongside GPU for comparison\n");
+  printf("  -W, --wide               Force wide (per-step) kernel path\n");
 
   printf("\nGeneral:\n");
   printf("  -v, --verbose            Print detailed simulation parameters\n");
@@ -106,7 +108,7 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
   int longindex = 0;
   int opt;
 
-  while ((opt = getopt_long(argc, argv, "ab:cd:efhi:l:nr:S:t:vw", cli_options, &longindex)) != -1) {
+  while ((opt = getopt_long(argc, argv, "ab:cd:efhi:l:nr:S:t:vwW", cli_options, &longindex)) != -1) {
     switch (opt) {
       // Output modes
       case 'a': p.allhit = 1; break;
@@ -163,6 +165,7 @@ static inline SimParams parseArgs(int argc, char* argv[]) {
         if (p.blockSize <= 0) inputError("blocksize");
         break;
       case 'c': p.compare = 1; break;
+      case 'W': p.wide = 1; break;
 
       // General
       case 'v': p.verbose = 1; break;
