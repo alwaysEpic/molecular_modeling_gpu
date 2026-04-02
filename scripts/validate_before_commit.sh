@@ -157,7 +157,7 @@ if [ -f "$BUILD_DIR/mc_sim" ]; then
     # Deep (persistent) kernel — analytical validation
     echo "=== Test 5: GPU Deep Kernel — 1D KS (1k paths) ==="
     ./mc_sim -i 1000 -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
-    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_d_wide.csv \
+    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_gpu.csv \
         --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^PASS|^FAIL")
     if echo "$RESULT" | grep -q "^PASS"; then
         report "PASS" "GPU deep kernel — 1D KS (1k paths)"
@@ -168,7 +168,7 @@ if [ -f "$BUILD_DIR/mc_sim" ]; then
     # CPU vs deep kernel agreement
     echo "=== Test 6: CPU vs GPU Deep Agreement ==="
     ./mc_sim -i 1000 -c -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
-    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_cpu_gpu_agreement.py" output_h.csv output_d_wide.csv \
+    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_cpu_gpu_agreement.py" output_h.csv output_gpu.csv \
         --no-plot --timestep 1E-7 2>&1 | grep -E "^(PASS|FAIL) — CPU/GPU")
     if echo "$RESULT" | grep -q "^PASS"; then
         report "PASS" "CPU vs GPU deep agreement"
@@ -179,7 +179,7 @@ if [ -f "$BUILD_DIR/mc_sim" ]; then
     # Wide (per-step) kernel — analytical validation
     echo "=== Test 7: GPU Wide Kernel — 1D KS (1k paths) ==="
     ./mc_sim -i 1000 -f -l 3E-7 -t 1E-2 -W > /dev/null 2>&1
-    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_d_wide.csv \
+    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_gpu.csv \
         --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^PASS|^FAIL")
     if echo "$RESULT" | grep -q "^PASS"; then
         report "PASS" "GPU wide kernel — 1D KS (1k paths)"
@@ -190,7 +190,7 @@ if [ -f "$BUILD_DIR/mc_sim" ]; then
     # CPU vs wide kernel agreement
     echo "=== Test 8: CPU vs GPU Wide Agreement ==="
     ./mc_sim -i 1000 -c -f -l 3E-7 -t 1E-2 -W > /dev/null 2>&1
-    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_cpu_gpu_agreement.py" output_h.csv output_d_wide.csv \
+    RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_cpu_gpu_agreement.py" output_h.csv output_gpu.csv \
         --no-plot --timestep 1E-7 2>&1 | grep -E "^(PASS|FAIL) — CPU/GPU")
     if echo "$RESULT" | grep -q "^PASS"; then
         report "PASS" "CPU vs GPU wide agreement"

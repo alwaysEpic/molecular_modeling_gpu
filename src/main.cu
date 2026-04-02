@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
   }
 
   FILE* fp_h = fopen("output_h.csv", "w+");
-  FILE* fp_d = fopen("output_d_wide.csv", "w+");
+  FILE* fp_d = fopen("output_gpu.csv", "w+");
   if (!fp_h || !fp_d) {
     printf("Error: could not open output files\n");
     exit(-1);
