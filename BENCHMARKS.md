@@ -24,12 +24,12 @@ Parameters: `-f`, Db=1E-11, deltaT=1E-7, t=1E-3
 | Tesla T4 | + precompute/curand_normal4/block256 | 0.012s | 0.013s |
 | Tesla T4 | **+ long kernel** | **0.008s** | **0.008s** |
 
-### GPU vs CPU Speedup (current)
+### GPU vs CPU Speedup (A100)
 
-| Paths | CPU (Colab Xeon) | GPU (T4, long) | Speedup |
+| Paths | CPU (Colab Xeon) | GPU (A100, long) | Speedup |
 |-------|-----------------|---------------------|---------|
-| 1,000 | 1.79s | 0.018s | **97x** |
-| 10,000 | 15.4s | 0.013s | **1,148x** |
+| 1,000 | 1.39s | 0.056s | **25x** |
+| 10,000 | 138.9s | 0.068s | **2,037x** |
 
 ## 1D First-Hit with Drift
 
@@ -37,20 +37,43 @@ Parameters: `-f -l 3E-7 -t 1E-2`, Db=1E-11, vel=1E-4, deltaT=1E-7, 100k steps
 
 | Processor | Change | 10,000 paths |
 |-----------|--------|-------------|
-| Colab Xeon CPU | current | 126s |
+| Colab Xeon CPU | current | 139s |
 | Tesla T4 GPU | original thesis code | 16.7s |
 | Tesla T4 GPU | device-side hit detection | 0.633s |
 | Tesla T4 GPU | **long kernel** | **0.065s** |
+| **A100 GPU** | **long kernel** | **0.068s** |
 
-GPU vs CPU speedup: 126s / 0.065s = **1,938x**
+GPU vs CPU speedup (A100): 139s / 0.068s = **2,037x**
 
-## Regression Test (vs thesis-baseline, same Colab session)
+## Regression Test (vs thesis-baseline, A100)
 
 | Test | Baseline | Current | Improvement |
 |------|----------|---------|-------------|
-| 1k default first-hit | 1.334s | 0.008s | **99.4%** |
-| 10k default first-hit | 11.214s | 0.008s | **99.9%** |
-| 10k 1D limit (100k steps) | 16.684s | 0.039s | **99.8%** |
+| 1k default first-hit | 5.87s | 0.067s | **98.9%** |
+| 10k default first-hit | 16.61s | 0.068s | **99.6%** |
+| 10k 1D limit (100k steps) | 16.61s | 0.068s | **99.6%** |
+
+## Scale Sweep (A100, long kernel, default first-hit, 10k steps)
+
+| Paths | Time | Thesis 1070 |
+|-------|------|-------------|
+| 10,000 | 0.012s | — |
+| 50,000 | 0.016s | — |
+| 100,000 | 0.026s | — |
+| 500,000 | 0.101s | — |
+| 1,000,000 | 0.192s | — |
+| 2,500,000 | 0.462s | — |
+| 5,000,000 | 0.914s | 5.08s |
+
+Throughput: **5.5M paths/sec** (A100) vs thesis 1M paths/sec (GTX 1070).
+
+## Gold Standard (A100, long kernel, dt=1E-8)
+
+| Test | Particles | Steps | Time | KS p-value |
+|------|-----------|-------|------|------------|
+| 1D first-hit | 10,000,000 | 1,000,000 | **143s** | 0.047 (PASS) |
+
+10 trillion particle-steps in under 3 minutes.
 
 ## Validation
 
@@ -82,7 +105,7 @@ GPU vs CPU speedup: 126s / 0.065s = **1,938x**
 | Brownian bridge correction | Correctness (fixes boundary-crossing bias) |
 | Wide kernel (d_update) with same optimizations | Same improvements, global memory positions |
 | CUDA Graphs for wide kernel | Reverted — added overhead, no improvement |
-| **Total vs thesis baseline** | **~1,400x** |
+| **Total vs thesis wide baseline** | **~2,000x** |
 
 ## Known Limitations
 

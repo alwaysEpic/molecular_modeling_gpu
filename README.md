@@ -60,16 +60,18 @@ Click **Runtime > Run all** or step through cells one at a time.
 
 The notebook is organized as a progression:
 
-| Section | What it does | Time |
-|---------|-------------|------|
+| Section | What it does | A100 Time |
+|---------|-------------|-----------|
 | Setup | Builds the simulator | ~1 min |
 | Particle Path | 3D random walk visualization | seconds |
-| Validation | KS tests against analytical solutions (1D, 3D, walls) | ~1 min |
+| Validation | KS tests against analytical solutions (1D, 3D, walls) | ~10 sec |
 | Consistency | CPU/GPU agreement, reproducibility, RNG quality | ~2 min |
 | Performance | Thesis vs current speedup comparison with charts | ~5 min |
-| Stress Tests | 1M and 10M path validation with plots | ~2 min |
+| Stress Tests | 1M and 10M path validation with plots | ~30 sec |
+| Research Grade | Timestep convergence, distance/drift sweeps, gold standard CIR | ~5 min |
 
-Total run time is about 10-15 minutes on a T4.
+Total run time is about 15 minutes on an A100 (~45 min on T4, mostly the
+gold standard CIR which takes ~20 min on T4 vs ~2.5 min on A100).
 
 ## Local Build (requires CUDA)
 
