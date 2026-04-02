@@ -14,15 +14,21 @@ free access to NVIDIA GPUs. No local GPU or CUDA installation required.
 
 ### 1. Create a GitHub Personal Access Token
 
-The repo is private, so Colab needs a token to clone it.
+The repo is private, so Colab needs a read-only token to clone it.
+Use a fine-grained token scoped to just this repository.
 
-1. Go to [github.com/settings/tokens](https://github.com/settings/tokens)
-2. Click **Generate new token** > **Generate new token (classic)**
-3. Give it a name (e.g. "colab")
-4. Set expiration (90 days is fine)
-5. Check the **repo** scope (full control of private repositories)
-6. Click **Generate token**
-7. **Copy the token** — you won't be able to see it again
+1. Go to [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+2. **Token name**: e.g. "colab-mc-sim"
+3. **Expiration**: 90 days (or your preference)
+4. **Resource owner**: your GitHub account
+5. **Repository access**: select **Only select repositories**, then choose
+   `molecular_modeling_gpu`
+6. **Permissions**: under **Repository permissions**, set **Contents** to
+   **Read-only**. Leave everything else at **No access**.
+7. Click **Generate token**
+8. **Copy the token** — you won't be able to see it again
+
+This gives Colab the minimum access needed: read-only to this one repo.
 
 ### 2. Open the Colab Notebook
 
