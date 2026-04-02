@@ -420,7 +420,7 @@ minimal correlation (Figures 3.1, 3.2 in thesis).
 
 Two GPU kernel architectures are implemented:
 
-**Deep kernel (`d_simulate_isolated`):** Each thread computes one particle's
+**Long kernel (`d_simulate_isolated`):** Each thread computes one particle's
 entire path (all timesteps) in a single kernel launch. Positions live in
 registers. Used for first-hit and limit modes where particles are independent.
 
@@ -432,7 +432,7 @@ Common design:
 - Thread index: `idx = blockIdx.x * blockDim.x + threadIdx.x`
 - Parameters precomputed on host (`diffStep = sqrt(2*D*dt)`, `driftStep = v*dt`)
 - RNG: cuRAND Philox4_32_10, seeded per-call with clock64() (faster than
-  persistent global state by 4-5x)
+  global memory state by 4-5x)
 - curand_normal4 generates 4 normals per call (3 for x/y/z, 4th for Brownian
   bridge)
 
@@ -455,7 +455,7 @@ Common design:
 - Memory transfer was the primary bottleneck, not computation
 
 **Current implementation (Tesla T4):**
-- Persistent (deep) kernel: ~1,400x faster than thesis baseline. Eliminates all
+- Long kernel: ~1,400x faster than thesis wide baseline. Eliminates all
   per-step memory transfers by running all timesteps in a single kernel launch
   with positions in registers.
 - Wide (per-step) kernel: ~47x faster than thesis baseline at 10k paths (same
@@ -472,7 +472,7 @@ Common design:
 ### 6.1 From the Thesis
 
 1. **Memory transfer bottleneck (resolved):** The original GPU kernel was called
-   from a CPU loop for each time step. The persistent kernel now computes entire
+   from a CPU loop for each time step. The long kernel now computes entire
    paths on-GPU without intermediate copies (~1,400x speedup). The wide kernel
    still launches per-step but uses device-side hit detection (~47x speedup).
 

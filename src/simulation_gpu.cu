@@ -84,7 +84,7 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
     }
   }
 
-  // Hit detection with Brownian bridge correction (matches deep kernel)
+  // Hit detection with Brownian bridge correction (matches long kernel)
   if (d_hit_flag[idx]) return;
 
   if (limit > 0) {
@@ -135,7 +135,7 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
 }
 
 // ---------------------------------------------------------------------------
-// Persistent kernel — all timesteps in one launch, positions in registers.
+// Long kernel — all timesteps in one launch, positions in registers.
 // For isolated particles only (first-hit/limit mode, no everything/allhit).
 // No global position arrays needed. RNG initialized once per particle.
 // ---------------------------------------------------------------------------
@@ -248,7 +248,7 @@ __global__ void d_simulate_isolated(long long rng_seed, float diffStep, float dr
 }
 
 // ---------------------------------------------------------------------------
-// Host entry point — dispatches to persistent or per-step kernel
+// Host entry point — dispatches to long or wide (per-step) kernel
 // ---------------------------------------------------------------------------
 float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   int numSteps = lround(p.time_in / p.deltaT);
@@ -258,9 +258,9 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   float diffStep = sqrtf(2.0f * p.Db * p.deltaT);
   float driftStep = p.velocity * p.deltaT;
 
-  // Use persistent (deep) kernel for isolated first-hit/limit modes.
+  // Use long kernel for isolated first-hit/limit modes.
   // --wide flag forces the per-step (wide) kernel for interaction development.
-  int use_persistent = !p.wide && (p.firsthit == 1 || p.limit > 0) && p.everything == 0 && p.allhit == 0;
+  int use_long = !p.wide && (p.firsthit == 1 || p.limit > 0) && p.everything == 0 && p.allhit == 0;
 
   // Device hit detection arrays (needed by both paths)
   int *d_hit_flag, *d_hit_step;
@@ -280,8 +280,8 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   cudaEventCreate(&stop);
   cudaEventRecord(start);
 
-  if (use_persistent) {
-    // ---------- Persistent kernel path ----------
+  if (use_long) {
+    // ---------- Long kernel path ----------
     // Single launch, all timesteps inside kernel, positions in registers.
     // No d_x/d_y/d_z arrays needed.
     long long rng_seed = (p.seed != 0) ? p.seed : (long long)clock();
@@ -376,9 +376,9 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   cudaEventElapsedTime(&pcost, start, stop);
 
   // Copy hit results and write CSV
-  // Runs for: deep kernel (always), wide kernel without per-step output (first-hit/limit with --wide)
+  // Runs for: long kernel (always), wide kernel without per-step output (first-hit/limit with --wide)
   // Does NOT run for: wide kernel with per-step output (everything/allhit — CSV already written per step)
-  int wrote_per_step = !use_persistent && (p.everything == 1 || p.allhit == 1);
+  int wrote_per_step = !use_long && (p.everything == 1 || p.allhit == 1);
   if (!wrote_per_step) {
     int* hit_flag = (int*)malloc(p.iter * sizeof(int));
     int* hit_step = (int*)malloc(p.iter * sizeof(int));

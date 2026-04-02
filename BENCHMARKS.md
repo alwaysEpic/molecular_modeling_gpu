@@ -22,11 +22,11 @@ Parameters: `-f`, Db=1E-11, deltaT=1E-7, t=1E-3
 | Tesla T4 | original thesis code | 1.38s | 11.2s |
 | Tesla T4 | device-side hit detection | 0.055s | 0.063s |
 | Tesla T4 | + precompute/curand_normal4/block256 | 0.012s | 0.013s |
-| Tesla T4 | **+ persistent kernel** | **0.008s** | **0.008s** |
+| Tesla T4 | **+ long kernel** | **0.008s** | **0.008s** |
 
 ### GPU vs CPU Speedup (current)
 
-| Paths | CPU (Colab Xeon) | GPU (T4, persistent) | Speedup |
+| Paths | CPU (Colab Xeon) | GPU (T4, long) | Speedup |
 |-------|-----------------|---------------------|---------|
 | 1,000 | 1.79s | 0.018s | **97x** |
 | 10,000 | 15.4s | 0.013s | **1,148x** |
@@ -40,7 +40,7 @@ Parameters: `-f -l 3E-7 -t 1E-2`, Db=1E-11, vel=1E-4, deltaT=1E-7, 100k steps
 | Colab Xeon CPU | current | 126s |
 | Tesla T4 GPU | original thesis code | 16.7s |
 | Tesla T4 GPU | device-side hit detection | 0.633s |
-| Tesla T4 GPU | **persistent kernel** | **0.065s** |
+| Tesla T4 GPU | **long kernel** | **0.065s** |
 
 GPU vs CPU speedup: 126s / 0.065s = **1,938x**
 
@@ -78,7 +78,7 @@ GPU vs CPU speedup: 126s / 0.065s = **1,938x**
 | CPU cleanup (stack vars, sqrt reduction) | ~2x CPU speedup |
 | Device-side hit detection | 25-224x — eliminated per-timestep cudaMemcpy |
 | Precompute constants + curand_normal4 + block 256 | ~5x on top of above |
-| **Persistent kernel (d_simulate_isolated)** | **~3x on top of above** |
+| **Long kernel (d_simulate_isolated)** | **~3x on top of above** |
 | Brownian bridge correction | Correctness (fixes boundary-crossing bias) |
 | Wide kernel (d_update) with same optimizations | Same improvements, global memory positions |
 | CUDA Graphs for wide kernel | Reverted — added overhead, no improvement |

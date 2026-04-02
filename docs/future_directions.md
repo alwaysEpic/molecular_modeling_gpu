@@ -19,8 +19,8 @@ removed per timestep with probability:
 
     P_deg = 1 - exp(-k_deg * dt)
 
-One uniform random draw per molecule per step. Works in both persistent and
-per-step kernels with no architectural changes.
+One uniform random draw per molecule per step. Works in both long and
+wide kernels with no architectural changes.
 
 **Publishable result:** BER vs degradation rate curves for OOK modulation,
 validating particle-level degradation against the analytical model in
@@ -143,7 +143,7 @@ which is a different physical effect.
 | Wall reflection | Done (bug-fixed, validated) |
 | Brownian bridge correction | Done (3D hit rate fixed) |
 | Truncated CDF validation | Done (accounts for censored tails) |
-| Persistent kernel | Done (positions in registers) |
+| Long kernel | Done (positions in registers) |
 | CPU reference path | Done (independent validation) |
 | Reproducibility (--seed) | Done |
 | 10M particle scale | Done (30s on T4) |

@@ -162,6 +162,6 @@ probability that the continuous path crossed the boundary between x_n and x_{n+1
 using P(cross) = exp(-(c-a)*(c-b) / (D*dt)), and sample accordingly.
 This eliminates the dominant discretization error without reducing dt.
 
-Implemented in both deep and wide GPU kernels and the CPU path. After correction,
+Implemented in both long and wide GPU kernels and the CPU path. After correction,
 1D KS and 3D binomial tests pass at 10k+ paths. See `docs/brownian_bridge.md`
 for full derivation and references.
