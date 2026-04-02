@@ -154,8 +154,8 @@ fi
 # GPU tests (only if mc_sim exists)
 echo ""
 if [ -f "$BUILD_DIR/mc_sim" ]; then
-    # Deep (persistent) kernel — analytical validation
-    echo "=== Test 5: GPU Deep Kernel — 1D KS (1k paths) ==="
+    # Long kernel — analytical validation
+    echo "=== Test 5: GPU Long Kernel — 1D KS (1k paths) ==="
     ./mc_sim -i 1000 -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
     RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_1d_firsthit.py" output_gpu.csv \
         --no-plot --dist 3E-7 --vel 1E-4 --timestep 1E-7 --timestop 1E-2 2>&1 | grep -E "^PASS|^FAIL")
@@ -166,7 +166,7 @@ if [ -f "$BUILD_DIR/mc_sim" ]; then
     fi
 
     # CPU vs long kernel agreement
-    echo "=== Test 6: CPU vs GPU Deep Agreement ==="
+    echo "=== Test 6: CPU vs GPU Long Agreement ==="
     ./mc_sim -i 1000 -c -f -l 3E-7 -t 1E-2 > /dev/null 2>&1
     RESULT=$("$VENV_PYTHON" "$SCRIPT_DIR/validate_cpu_gpu_agreement.py" output_h.csv output_gpu.csv \
         --no-plot --timestep 1E-7 2>&1 | grep -E "^(PASS|FAIL) — CPU/GPU")
