@@ -375,8 +375,11 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
   cudaEventSynchronize(stop);
   cudaEventElapsedTime(&pcost, start, stop);
 
-  // Both paths: copy hit results and write CSV
-  if (use_persistent) {
+  // Copy hit results and write CSV
+  // Runs for: deep kernel (always), wide kernel without per-step output (first-hit/limit with --wide)
+  // Does NOT run for: wide kernel with per-step output (everything/allhit — CSV already written per step)
+  int wrote_per_step = !use_persistent && (p.everything == 1 || p.allhit == 1);
+  if (!wrote_per_step) {
     int* hit_flag = (int*)malloc(p.iter * sizeof(int));
     int* hit_step = (int*)malloc(p.iter * sizeof(int));
     float* hit_x = (float*)malloc(p.iter * sizeof(float));
