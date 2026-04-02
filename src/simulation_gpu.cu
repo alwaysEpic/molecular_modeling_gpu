@@ -40,15 +40,23 @@ __device__ void d_reflection(float x1, float y1, float x0, float y0, float* x_ne
 // Per-step kernel — kept for future collision mode and everything/allhit paths.
 // Positions live in global memory (d_x, d_y, d_z), accessible between steps.
 // ---------------------------------------------------------------------------
-__global__ void d_update(long long rng_seed, float diffStep, float driftStep, int iter, float* d_x, float* d_y,
-                         float* d_z, int walls, float radius, int start_flag, int t_step, int* d_hit_flag,
-                         int* d_hit_step, float* d_hit_x, float* d_hit_y, float* d_hit_z, float limit, float rec_rad,
-                         float locx, float locy, float locz, int firsthit, float start_x, float start_y,
-                         float start_z) {
+// Device-side step counter for CUDA Graph replay (host updates via cudaMemcpyAsync)
+struct WideStepInfo {
+  int t_step;
+  long long rng_seed;
+};
+
+__global__ void d_update(const WideStepInfo* step_info, float diffStep, float driftStep, int iter, float* d_x,
+                         float* d_y, float* d_z, int walls, float radius, int* d_hit_flag, int* d_hit_step,
+                         float* d_hit_x, float* d_hit_y, float* d_hit_z, float limit, float rec_rad, float locx,
+                         float locy, float locz, int firsthit) {
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx >= iter) return;
 
   if (firsthit && d_hit_flag[idx]) return;
+
+  int t_step = step_info->t_step;
+  long long rng_seed = step_info->rng_seed;
 
   curandStatePhilox4_32_10_t state;
   curand_init(rng_seed, idx, 0, &state);
@@ -65,15 +73,10 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
   float u_bridge = 0.5f * (1.0f + erff(rn.w * 0.70710678118f));
   float Ddt = diffStep * diffStep * 0.5f;
 
-  if (start_flag == 0) {
-    d_x[idx] = start_x;
-    d_y[idx] = start_y;
-    d_z[idx] = start_z;
-  } else {
-    d_x[idx] += x_next;
-    d_y[idx] += y_next;
-    d_z[idx] += z_next;
-  }
+  // Positions are pre-initialized on device before the loop
+  d_x[idx] += x_next;
+  d_y[idx] += y_next;
+  d_z[idx] += z_next;
 
   if (walls == 1) {
     if (sqrtf(d_x[idx] * d_x[idx] + d_y[idx] * d_y[idx]) > radius) {
@@ -95,7 +98,7 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
       d_hit_y[idx] = d_y[idx];
       d_hit_z[idx] = d_z[idx];
       return;
-    } else if (start_flag && pz_old < limit && d_z[idx] < limit) {
+    } else if (pz_old < limit && d_z[idx] < limit) {
       float p_cross = __expf(-(limit - pz_old) * (limit - d_z[idx]) / Ddt);
       if (u_bridge < p_cross) {
         d_hit_flag[idx] = 1;
@@ -115,7 +118,7 @@ __global__ void d_update(long long rng_seed, float diffStep, float driftStep, in
       d_hit_x[idx] = d_x[idx];
       d_hit_y[idx] = d_y[idx];
       d_hit_z[idx] = d_z[idx];
-    } else if (start_flag) {
+    } else {
       float dx_old = x_last - locx, dy_old = y_last - locy, dz_old = pz_old - locz;
       float r_old = sqrtf(dx_old * dx_old + dy_old * dy_old + dz_old * dz_old);
       if (r_old > rec_rad) {
@@ -325,17 +328,46 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
       last_GPU.resize(p.iter, 0);
     }
 
+    // Device-side step info (updated each iteration, kernel reads from device memory)
+    WideStepInfo *d_step_info;
+    cudaMalloc(&d_step_info, sizeof(WideStepInfo));
+    WideStepInfo h_step_info;
+
+    // Capture CUDA Graph for the kernel launch (once)
+    cudaGraph_t graph;
+    cudaGraphExec_t graph_exec;
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    int use_graph = !needs_per_step_output;  // Can't graph with per-step memcpy
+
+    if (use_graph) {
+      // Set initial step info for capture
+      h_step_info.t_step = 0;
+      h_step_info.rng_seed = (p.seed != 0) ? p.seed : (long long)clock();
+      cudaMemcpy(d_step_info, &h_step_info, sizeof(WideStepInfo), cudaMemcpyHostToDevice);
+
+      cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+      d_update<<<gridSize, p.blockSize, 0, stream>>>(d_step_info, diffStep, driftStep, p.iter, d_x, d_y, d_z,
+                                                      p.walls, p.radius, d_hit_flag, d_hit_step, d_hit_x, d_hit_y,
+                                                      d_hit_z, p.limit, p.rec_rad, p.locx, p.locy, p.locz, p.firsthit);
+      // Future: d_interactions<<<...>>>() would be captured here too
+      cudaStreamEndCapture(stream, &graph);
+      cudaGraphInstantiate(&graph_exec, graph, NULL, NULL, 0);
+    }
+
     for (int t_count = 0; t_count < numSteps; t_count++) {
-      long long rng_seed = (p.seed != 0) ? p.seed + t_count : clock();
+      h_step_info.t_step = t_count;
+      h_step_info.rng_seed = (p.seed != 0) ? p.seed + t_count : clock();
+      cudaMemcpyAsync(d_step_info, &h_step_info, sizeof(WideStepInfo), cudaMemcpyHostToDevice, stream);
 
-      d_update<<<gridSize, p.blockSize>>>(rng_seed, diffStep, driftStep, p.iter, d_x, d_y, d_z, p.walls, p.radius,
-                                          1, t_count, d_hit_flag, d_hit_step, d_hit_x, d_hit_y, d_hit_z, p.limit,
-                                          p.rec_rad, p.locx, p.locy, p.locz, p.firsthit, p.start_x, p.start_y,
-                                          p.start_z);
-
-      cudaError_t code = cudaGetLastError();
-      if (code != cudaSuccess && p.verbose == 1)
-        printf("Cuda error kernel -- %s\n", cudaGetErrorString(code));
+      if (use_graph) {
+        cudaGraphLaunch(graph_exec, stream);
+      } else {
+        d_update<<<gridSize, p.blockSize, 0, stream>>>(d_step_info, diffStep, driftStep, p.iter, d_x, d_y, d_z,
+                                                        p.walls, p.radius, d_hit_flag, d_hit_step, d_hit_x, d_hit_y,
+                                                        d_hit_z, p.limit, p.rec_rad, p.locx, p.locy, p.locz,
+                                                        p.firsthit);
+      }
 
       // Future: d_interactions<<<...>>>() would go here
 
@@ -362,6 +394,16 @@ float run_gpu_simulation(const SimParams& p, FILE* fp_out) {
         fprintf(fp_out, "\n");
       }
     }
+
+    // Wait for stream to finish
+    cudaStreamSynchronize(stream);
+
+    if (use_graph) {
+      cudaGraphExecDestroy(graph_exec);
+      cudaGraphDestroy(graph);
+    }
+    cudaStreamDestroy(stream);
+    cudaFree(d_step_info);
 
     free(x);
     free(y);
