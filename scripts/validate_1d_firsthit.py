@@ -57,9 +57,15 @@ def analytical_passage_time(t, b, Db, v):
     return b / np.sqrt(4 * np.pi * Db * t**3) * np.exp(-(v * t - b)**2 / (4 * Db * t))
 
 
-def ks_test_invgauss(hit_times, b, Db, v):
+def ks_test_invgauss(hit_times, b, Db, v, t_stop):
     """
-    One-sample KS test against the inverse Gaussian distribution.
+    One-sample KS test against the truncated inverse Gaussian distribution.
+
+    The simulation only captures hits within [0, t_stop]. Particles that
+    don't hit by t_stop are excluded, creating right-tail censoring that
+    biases the sample mean below the theoretical mean (b/v). The truncated
+    CDF F(t)/F(t_stop) is the correct comparison distribution — it
+    conditions on the particle having hit within the observation window.
 
     scipy.stats.invgauss parameterization:
       mu_scipy = 2*D / (b*v)     (shape parameter)
@@ -73,8 +79,15 @@ def ks_test_invgauss(hit_times, b, Db, v):
     scale_scipy = b**2 / (2 * Db)
     frozen = invgauss(mu_scipy, loc=0, scale=scale_scipy)
 
-    stat, pvalue = kstest(hit_times, frozen.cdf)
-    return stat, pvalue
+    # Truncated CDF: F_trunc(t) = F(t) / F(t_stop)
+    # This accounts for the censored right tail
+    capture_prob = frozen.cdf(t_stop)
+
+    def truncated_cdf(t):
+        return frozen.cdf(t) / capture_prob
+
+    stat, pvalue = kstest(hit_times, truncated_cdf)
+    return stat, pvalue, capture_prob
 
 
 def nrmse_histogram(hit_times, b, Db, v, num_bins=120):
@@ -135,9 +148,10 @@ def main():
         return 0
 
     print(f"\n=== KS Test (alpha={args.alpha}) ===")
-    ks_stat, ks_pvalue = ks_test_invgauss(hit_times, args.dist, args.db, args.vel)
+    ks_stat, ks_pvalue, capture_prob = ks_test_invgauss(hit_times, args.dist, args.db, args.vel, args.timestop)
     print(f"  KS statistic: {ks_stat:.6f}")
     print(f"  p-value: {ks_pvalue:.6f}")
+    print(f"  Capture probability P(T<=t_stop): {capture_prob:.4f}")
     if len(hit_times) < 50:
         print(f"  (low-power: n={len(hit_times)} < 50, results may not be reliable)")
     ks_pass = ks_pvalue > args.alpha
@@ -177,17 +191,18 @@ def main():
         nrmse_label = f'NRMSE={nrmse:.4f}' if nrmse is not None else 'NRMSE n/a (< 1000 hits)'
         axes[0].set_title(f'PDF Comparison ({nrmse_label})')
 
-        # CDF comparison (what KS test actually compares)
+        # CDF comparison — truncated inverse Gaussian (what KS test compares against)
         from scipy.stats import invgauss
         mu_scipy = 2 * args.db / (args.dist * args.vel)
         scale_scipy = args.dist**2 / (2 * args.db)
         frozen = invgauss(mu_scipy, loc=0, scale=scale_scipy)
+        cp = frozen.cdf(args.timestop)
 
         sorted_times = np.sort(hit_times)
         ecdf = np.arange(1, len(sorted_times) + 1) / len(sorted_times)
         axes[1].plot(sorted_times * time_scale, ecdf, 'k', linewidth=2, label='Empirical CDF')
         t_cdf = np.linspace(sorted_times.min(), sorted_times.max(), 10000)
-        axes[1].plot(t_cdf * time_scale, frozen.cdf(t_cdf), 'r--', linewidth=2, label='Analytical CDF')
+        axes[1].plot(t_cdf * time_scale, frozen.cdf(t_cdf) / cp, 'r--', linewidth=2, label='Truncated analytical CDF')
         axes[1].set_xlabel('time (msec)', fontsize=14)
         axes[1].set_ylabel('CDF', fontsize=14)
         axes[1].legend(fontsize=12)
