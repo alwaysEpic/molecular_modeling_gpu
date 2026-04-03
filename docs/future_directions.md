@@ -116,6 +116,42 @@ channel capacity 2–3x.
 
 ---
 
+## Relationship to AcCoRD
+
+AcCoRD (Noel et al., Nano Comm. Networks 11:44-75, 2017) is the closest
+thing to a standard MC simulator. It is C-based, CPU-only, single-threaded,
+and essentially unmaintained since 2019. Its microscopic diffusion model uses
+the same Euler-Maruyama step as ours, but wraps it in an event-driven
+priority queue with linked-list molecule storage — architecturally
+incompatible with GPU parallelism.
+
+Rather than porting AcCoRD to GPU (fighting its serial event-driven core),
+the approach is to bring AcCoRD-equivalent physics into our GPU-native
+architecture. Several AcCoRD features map directly onto embarrassingly
+parallel per-particle operations:
+
+| AcCoRD Feature | GPU Difficulty | Notes |
+|----------------|---------------|-------|
+| First-order degradation | Low | One random draw per molecule per step (section 1 above) |
+| Multiple molecule types | Low | Separate arrays or type index per particle |
+| Partial absorption | Low | Probability check at hit detection (section 5 above) |
+| Parabolic flow | Low | Position-dependent drift, one multiply (section 4 above) |
+| Reversible binding | Medium | Receiver state requires atomics |
+| Second-order reactions | Hard | Neighbor finding, spatial hashing (section 3 above) |
+| Mesoscopic RDME | Not viable | Gillespie algorithm is fundamentally serial |
+
+Features 1-4 above cover the common AcCoRD use cases without touching
+the architecture. This would position the simulator as a GPU-accelerated
+alternative to AcCoRD for the subset of MC problems that are
+particle-based and embarrassingly parallel — which is most of them.
+
+No published GPU-accelerated full MC simulator exists. The only GPU work
+in MC is Stroobant and Felicetti et al. (Nano Comm. Networks, 2019) who
+GPU-accelerated collision detection only, reporting ~100x speedup on
+that component alone.
+
+---
+
 ## Note: Molecule-Molecule Collisions
 
 Molecule-molecule collisions are physically negligible at MC concentrations
