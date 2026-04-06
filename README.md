@@ -5,7 +5,40 @@ Simulates particle diffusion via Brownian motion with optional laminar drift,
 modeling how nanoscale messenger molecules move through the bloodstream.
 
 Based on the master's thesis *"The Application of GPU to Molecular Communication
-Studies"* (Cain, Eastern Washington University, 2018).
+Studies"* (Cain, Eastern Washington University, 2018, advised by Dr. Uri Rogers
+and Dr. Yun Tian).
+
+## Performance
+
+The original thesis GPU implementation (GTX 1070) topped out at 200k particles
+in ~6 minutes, with the GPU actually slower than the CPU beyond 100k paths due
+to per-timestep memory transfers.
+
+After optimization, the same simulation runs **2,000x faster**:
+
+| Particles | Thesis (GTX 1070) | Current (A100) | Speedup vs CPU |
+|-----------|-------------------|----------------|----------------|
+| 1,000     | 2.27s             | 0.067s         | 25x            |
+| 10,000    | 4.81s             | 0.068s         | 2,037x         |
+| 100,000   | 111.98s           | 0.12s          | 1,250x         |
+| 5,000,000 | 5.08s             | 0.91s          | —              |
+| 10,000,000| —                 | 14.4s          | —              |
+
+The gold standard run — 10M particles at dt=1E-8 (10 trillion particle-steps) —
+completes in **143 seconds** on an A100, validated against analytical solutions.
+
+![Performance comparison](docs/images/performance_comparison.png)
+
+## Validation
+
+All simulation output is validated against closed-form analytical solutions
+using the Kolmogorov-Smirnov test (not visual inspection). This caught a
+boundary-crossing bias at 10k+ paths that was invisible in histogram overlays,
+leading to the Brownian bridge correction.
+
+![1D first-hit validation at 1M paths](docs/images/validation_1d_1M.png)
+
+![3D spherical receiver at 1M paths](docs/images/validation_3d_1M.png)
 
 ## Quick Start (Google Colab)
 

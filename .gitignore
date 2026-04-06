@@ -21,8 +21,9 @@ scripts/.venv/
 __pycache__/
 *.pyc
 
-# Validation output
+# Validation output (except docs/images for README)
 *.png
+!docs/images/*.png
 
 # Colab output notebooks
 ipynb_files/
