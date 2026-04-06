@@ -46,9 +46,9 @@ measure_pdf_index = find(t>=time_measure,1)
 
 x_pos_Drift = repmat(Vel*t,iterations,1);
 
-x_rand = randn(iterations,length(t)); %csvread('/Users/alwaysMacbook/Desktop/rand_x.csv');
-y_rand = randn(iterations,length(t)); %csvread('/Users/alwaysMacbook/Desktop/rand_y.csv');
-z_rand = randn(iterations,length(t)); %csvread('/Users/alwaysMacbook/Desktop/rand_z.csv');
+x_rand = randn(iterations,length(t));
+y_rand = randn(iterations,length(t));
+z_rand = randn(iterations,length(t));
 
 x_pos_Diff = sqrt(Db*delta_time)*x_rand;
 y_pos_Diff = sqrt(Db*delta_time)*y_rand;
