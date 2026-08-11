@@ -45,49 +45,22 @@ leading to the Brownian bridge correction.
 The easiest way to run the simulator is through Google Colab, which provides
 free access to NVIDIA GPUs. No local GPU or CUDA installation required.
 
-### 1. Create a GitHub Personal Access Token
-
-The repo is private, so Colab needs a read-only token to clone it.
-Use a fine-grained token scoped to just this repository.
-
-1. Go to [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
-2. **Token name**: e.g. "colab-mc-sim"
-3. **Expiration**: 90 days (or your preference)
-4. **Resource owner**: your GitHub account
-5. **Repository access**: select **Only select repositories**, then choose
-   `molecular_modeling_gpu`
-6. **Permissions**: under **Repository permissions**, set **Contents** to
-   **Read-only**. Leave everything else at **No access**.
-7. Click **Generate token**
-8. **Copy the token** — you won't be able to see it again
-
-This gives Colab the minimum access needed: read-only to this one repo.
-
-### 2. Open the Colab Notebook
+### 1. Open the Colab Notebook
 
 1. Go to [colab.research.google.com](https://colab.research.google.com)
    - Sign in with a Google account if you don't have one
 2. Click **File > Open notebook**
 3. Select the **GitHub** tab
 4. Paste the repo URL: `https://github.com/alwaysEpic/molecular_modeling_gpu`
-   - You may need to check "Include private repos" and authorize Colab
 5. Select `scripts/colab_build_test.ipynb`
 
-### 3. Add Your Token to Colab Secrets
-
-1. In the left sidebar, click the **key icon** (Secrets)
-2. Click **Add a new secret**
-3. Name: `GITHUB_PAT`
-4. Value: paste the token you copied in step 1
-5. Toggle **Notebook access** on
-
-### 4. Select a GPU Runtime
+### 2. Select a GPU Runtime
 
 1. Go to **Runtime > Change runtime type**
 2. Under **Hardware accelerator**, select **T4 GPU** (free tier) or **A100** (if available)
 3. Click **Save**
 
-### 5. Run the Notebook
+### 3. Run the Notebook
 
 Click **Runtime > Run all** or step through cells one at a time.
 
